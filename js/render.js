@@ -244,7 +244,7 @@
 
     // Create a buffer to store the view parameters
     var viewParamsBuffer = device.createBuffer({
-        size: 16 * 4,
+        size: 20 * 4,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
@@ -314,17 +314,21 @@
             // Upload the combined projection and view matrix
             projView = mat4.mul(projView, projection, camera.camera);
             var upload = device.createBuffer({
-                size: 16 * 4,
+                size: 20 * 4,
                 usage: GPUBufferUsage.COPY_SRC,
                 mappedAtCreation: true
             });
-            new Float32Array(upload.getMappedRange()).set(projView);
+            {
+                var map = new Float32Array(upload.getMappedRange());
+                map.set(projView);
+                map.set(camera.eyePos(), 16)
+            }
             upload.unmap();
 
             var commandEncoder = device.createCommandEncoder();
 
             // Copy the upload buffer to our uniform buffer
-            commandEncoder.copyBufferToBuffer(upload, 0, viewParamsBuffer, 0, 16 * 4);
+            commandEncoder.copyBufferToBuffer(upload, 0, viewParamsBuffer, 0, 20 * 4);
 
             var renderPass = commandEncoder.beginRenderPass(renderPassDesc);
 
