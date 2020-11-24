@@ -46,34 +46,129 @@
 
     // Specify vertex data
     var dataBuf = device.createBuffer({
-        size: 3 * 2 * 4 * 4,
+        size: 12 * 3 * 3 * 4,
         usage: GPUBufferUsage.VERTEX,
         mappedAtCreation: true,
     });
-    // Interleaved positions and colors
     new Float32Array(dataBuf.getMappedRange()).set([
-        1, -1, 0, 1,
-        1, 0, 0, 1,
-        -1, -1, 0, 1,
-        0, 1, 0, 1,
-        0, 1, 0, 1,
-        0, 0, 1, 1,
+        1, 0, 0,
+        0, 0, 0,
+        1, 1, 0,
+
+        0, 1, 0,
+        1, 1, 0,
+        0, 0, 0,
+
+        1, 0, 1,
+        1, 0, 0,
+        1, 1, 1,
+
+        1, 1, 0,
+        1, 1, 1,
+        1, 0, 0,
+
+        0, 0, 1,
+        1, 0, 1,
+        0, 1, 1,
+
+        1, 1, 1,
+        0, 1, 1,
+        1, 0, 1,
+
+        0, 0, 0,
+        0, 0, 1,
+        0, 1, 0,
+
+        0, 1, 1,
+        0, 1, 0,
+        0, 0, 1,
+
+        1, 1, 0,
+        0, 1, 0,
+        1, 1, 1,
+
+        0, 1, 1,
+        1, 1, 1,
+        0, 1, 0,
+
+        0, 0, 1,
+        0, 0, 0,
+        1, 0, 1,
+
+        1, 0, 0,
+        1, 0, 1,
+        0, 0, 0
     ]);
     dataBuf.unmap();
+
+    var colorBuf = device.createBuffer({
+        size: 12 * 3 * 3 * 4,
+        usage: GPUBufferUsage.VERTEX,
+        mappedAtCreation: true,
+    });
+    new Float32Array(colorBuf.getMappedRange()).set([
+        1, 1, 1,
+        1, 1, 1,
+        1, 1, 1,
+        1, 1, 1,
+        1, 1, 1,
+        1, 1, 1,
+
+        1, 0, 0,
+        1, 0, 0,
+        1, 0, 0,
+        1, 0, 0,
+        1, 0, 0,
+        1, 0, 0,
+
+        0, 1, 0,
+        0, 1, 0,
+        0, 1, 0,
+        0, 1, 0,
+        0, 1, 0,
+        0, 1, 0,
+
+        0, 0, 1,
+        0, 0, 1,
+        0, 0, 1,
+        0, 0, 1,
+        0, 0, 1,
+        0, 0, 1,
+
+        1, 1, 0,
+        1, 1, 0,
+        1, 1, 0,
+        1, 1, 0,
+        1, 1, 0,
+        1, 1, 0,
+
+        0, 1, 1,
+        0, 1, 1,
+        0, 1, 1,
+        0, 1, 1,
+        0, 1, 1,
+        0, 1, 1
+    ]);
+    colorBuf.unmap();
 
     var vertexState = {
         vertexBuffers: [
             {
-                arrayStride: 2 * 4 * 4,
+                arrayStride: 3 * 4,
                 attributes: [
                     {
-                        format: "float4",
+                        format: "float3",
                         offset: 0,
                         shaderLocation: 0
-                    },
+                    }
+                ]
+            },
+            {
+                arrayStride: 3 * 4,
+                attributes: [
                     {
-                        format: "float4",
-                        offset: 4 * 4,
+                        format: "float3",
+                        offset: 0,
                         shaderLocation: 1
                     }
                 ]
@@ -119,6 +214,9 @@
         vertexStage: vertexStage,
         fragmentStage: fragmentStage,
         primitiveTopology: "triangle-list",
+        rasterizationState: {
+            cullMode: "front",
+        },
         vertexState: vertexState,
         colorStates: [{
             format: swapChainFormat
@@ -232,8 +330,9 @@
 
             renderPass.setPipeline(renderPipeline);
             renderPass.setVertexBuffer(0, dataBuf);
+            renderPass.setVertexBuffer(1, colorBuf);
             renderPass.setBindGroup(0, bindGroup);
-            renderPass.draw(3, 1, 0, 0);
+            renderPass.draw(12 * 3, 1, 0, 0);
 
             renderPass.endPass();
             device.defaultQueue.submit([commandEncoder.finish()]);
