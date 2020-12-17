@@ -15,13 +15,21 @@ var cubeStrip = [
     0, 0, 0
 ];
 
+var colorMap = [[13, 8, 135, 255], [16, 7, 136, 255], [19, 7, 137, 255], [25, 6, 140, 255], [27, 6, 141, 255], [32, 6, 143, 255], [34, 6, 144, 255], [38, 5, 145, 255], [40, 5, 146, 255], [42, 5, 147, 255], [46, 5, 149, 255], [47, 5, 150, 255], [51, 5, 151, 255], [53, 4, 152, 255], [56, 4, 154, 255], [58, 4, 154, 255], [60, 4, 155, 255], [63, 4, 156, 255], [65, 4, 157, 255], [68, 3, 158, 255], [70, 3, 159, 255], [73, 3, 160, 255], [75, 3, 161, 255], [76, 2, 161, 255], [80, 2, 162, 255], [81, 2, 163, 255], [85, 2, 164, 255], [86, 1, 164, 255], [89, 1, 165, 255], [91, 1, 165, 255], [92, 1, 166, 255], [96, 1, 166, 255], [97, 0, 167, 255], [100, 0, 167, 255], [102, 0, 167, 255], [105, 0, 168, 255], [107, 0, 168, 255], [108, 0, 168, 255], [111, 0, 168, 255], [113, 0, 168, 255], [116, 1, 168, 255], [117, 1, 168, 255], [120, 1, 168, 255], [122, 2, 168, 255], [123, 2, 168, 255], [126, 3, 168, 255], [128, 4, 168, 255], [131, 5, 167, 255], [132, 6, 167, 255], [135, 7, 166, 255], [136, 8, 166, 255], [138, 9, 165, 255], [141, 11, 165, 255], [142, 12, 164, 255], [145, 14, 163, 255], [146, 15, 163, 255], [149, 17, 161, 255], [150, 19, 161, 255], [152, 20, 160, 255], [154, 22, 159, 255], [156, 23, 158, 255], [158, 25, 157, 255], [160, 26, 156, 255], [162, 29, 154, 255], [163, 30, 154, 255], [165, 31, 153, 255], [167, 33, 151, 255], [168, 34, 150, 255], [171, 36, 148, 255], [172, 38, 148, 255], [174, 40, 146, 255], [176, 41, 145, 255], [177, 42, 144, 255], [179, 44, 142, 255], [180, 46, 141, 255], [182, 48, 139, 255], [183, 49, 138, 255], [186, 51, 137, 255], [187, 52, 136, 255], [188, 53, 135, 255], [190, 56, 133, 255], [191, 57, 132, 255], [193, 59, 130, 255], [194, 60, 129, 255], [196, 62, 127, 255], [197, 64, 126, 255], [198, 65, 125, 255], [200, 67, 123, 255], [201, 68, 122, 255], [203, 70, 121, 255], [204, 71, 120, 255], [205, 74, 118, 255], [206, 75, 117, 255], [208, 77, 115, 255], [209, 78, 114, 255], [210, 79, 113, 255], [212, 82, 112, 255], [213, 83, 111, 255], [214, 85, 109, 255], [215, 86, 108, 255], [217, 89, 106, 255], [218, 90, 106, 255], [218, 91, 105, 255], [220, 93, 103, 255], [221, 94, 102, 255], [222, 97, 100, 255], [223, 98, 99, 255], [225, 100, 98, 255], [226, 101, 97, 255], [226, 102, 96, 255], [228, 105, 94, 255], [229, 106, 93, 255], [230, 108, 92, 255], [231, 110, 91, 255], [232, 112, 89, 255], [233, 113, 88, 255], [233, 114, 87, 255], [235, 117, 86, 255], [235, 118, 85, 255], [237, 121, 83, 255], [237, 122, 82, 255], [239, 124, 81, 255], [239, 126, 80, 255], [240, 127, 79, 255], [241, 129, 77, 255], [241, 131, 76, 255], [243, 133, 75, 255], [243, 135, 74, 255], [244, 137, 72, 255], [245, 139, 71, 255], [245, 140, 70, 255], [246, 143, 68, 255], [247, 144, 68, 255], [247, 147, 66, 255], [248, 148, 65, 255], [249, 151, 63, 255], [249, 152, 62, 255], [249, 154, 62, 255], [250, 156, 60, 255], [250, 158, 59, 255], [251, 161, 57, 255], [251, 162, 56, 255], [252, 165, 55, 255], [252, 166, 54, 255], [252, 168, 53, 255], [253, 171, 51, 255], [253, 172, 51, 255], [253, 175, 49, 255], [253, 177, 48, 255], [253, 180, 47, 255], [253, 181, 46, 255], [254, 183, 45, 255], [254, 186, 44, 255], [254, 187, 43, 255], [254, 190, 42, 255], [254, 192, 41, 255], [253, 195, 40, 255], [253, 197, 39, 255], [253, 198, 39, 255], [253, 202, 38, 255], [253, 203, 38, 255], [252, 206, 37, 255], [252, 208, 37, 255], [251, 211, 36, 255], [251, 213, 36, 255], [251, 215, 36, 255], [250, 218, 36, 255], [249, 220, 36, 255], [248, 223, 37, 255], [248, 225, 37, 255], [247, 228, 37, 255], [246, 230, 38, 255], [246, 232, 38, 255], [245, 235, 39, 255], [244, 237, 39, 255], [243, 240, 39, 255], [242, 242, 39, 255], [241, 245, 37, 255], [240, 247, 36, 255], [240, 249, 34, 255]];
+
 var takeScreenShot = false;
 var canvas = null;
 
-var gl = null;
-var shader = null;
-var volumeTexture = null;
-var colormapTex = null;
+var device = null;
+var adapter = null;
+var dataBuf = null;
+var volumeDataBuffer = null;
+var volumeParamsBuffer = null;
+var viewParamsBuffer = null;
+var colorMapBuffer = null;
+var renderPipeline = null;
+var renderPassDesc = null;
+var swapChain = null;
 var fileRegex = /.*\/(\w+)_(\d+)x(\d+)x(\d+)_(\w+)\.*/;
 var proj = null;
 var camera = null;
@@ -96,6 +104,94 @@ var loadVolume = function (file, onload) {
     req.send();
 }
 
+var selectVolume = function () {
+    var selection = document.getElementById("volumeList").value;
+    history.replaceState(history.state, "#" + selection, "#" + selection);
+
+    loadVolume(volumes[selection], function (file, dataBuffer) {
+        var m = file.match(fileRegex);
+        var volDims = [parseInt(m[2]), parseInt(m[3]), parseInt(m[4])];
+
+        var longestAxis = Math.max(volDims[0], Math.max(volDims[1], volDims[2]));
+        var volScale = new Float32Array(3).set([volDims[0] / longestAxis, volDims[1] / longestAxis,
+        volDims[2] / longestAxis]);
+
+        // Upload the volume data
+        upload = device.createBuffer({
+            size: 64 * 64 * 64 * 1,
+            usage: GPUBufferUsage.COPY_SRC,
+            mappedAtCreation: true
+        })
+        new Uint8Array(upload.getMappedRange()).set(dataBuffer);
+        upload.unmap();
+
+        var commandEncoder = device.createCommandEncoder();
+
+        commandEncoder.copyBufferToBuffer(upload, 0, volumeDataBuffer, 0, 64 * 64 * 64 * 1);
+
+        newVolumeUpload = true;
+        setInterval(function () {
+            // Save them some battery if they're not viewing the tab
+            if (document.hidden) {
+                return;
+            }
+
+            // Reset the sampling rate and camera for new volumes
+            if (newVolumeUpload) {
+                camera = new ArcballCamera(defaultEye, center, up, 2, [WIDTH, HEIGHT]);
+            }
+            renderPassDesc.colorAttachments[0].attachment = swapChain.getCurrentTexture().createView();
+
+            // Compute and upload the combined projection and view matrix
+            projView = mat4.mul(projView, proj, camera.camera);
+            var eye = new Float32Array(3).set([camera.invCamera[12], camera.invCamera[13], camera.invCamera[14]]);
+            var upload = device.createBuffer({
+                size: 16 * 4 + 2 * 3 * 4,
+                usage: GPUBufferUsage.COPY_SRC,
+                mappedAtCreation: true
+            });
+            new Float32Array(upload.getMappedRange()).set(projView + eye + volScale);
+            upload.unmap();
+
+            // Compute and upload the volume params
+            var test = device.createBuffer({
+                size: 3 * 1 + 4,
+                usage: GPUBufferUsage.COPY_SRC,
+                mappedAtCreation: true
+            })
+            new Uint8Array(test.getMappedRange()).set(volDims + [samplingRate]);
+            upload.unmap();
+
+            var commandEncoder = device.createCommandEncoder();
+
+            commandEncoder.copyBufferToBuffer(upload, 0, viewParamsBuffer, 0, 16 * 4 + 2 * 3 * 4);
+            commandEncoder.copyBufferToBuffer(upload, 0, volumeParamsBuffer, 0, 3 * 1 + 4);
+
+            var renderPass = commandEncoder.beginRenderPass(renderPassDesc);
+
+            renderPass.setPipeline(renderPipeline);
+            renderPass.setVertexBuffer(0, dataBuf);
+            renderPass.draw(cubeStrip.length / 3, 1, 0, 0);
+
+            renderPass.endPass();
+            device.defaultQueue.submit([commandEncoder.finish()]);
+
+            newVolumeUpload = false;
+        }, targetFrameTime);
+    });
+}
+
+var selectColormap = function () {
+    var selection = document.getElementById("colormapList").value;
+    var colormapImage = new Image();
+    colormapImage.onload = function () {
+        gl.activeTexture(gl.TEXTURE1);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 180, 1,
+            gl.RGBA, gl.UNSIGNED_BYTE, colormapImage);
+    };
+    colormapImage.src = colormaps[selection];
+}
+
 var fillVolumeSelector = function () {
     var selector = document.getElementById("volumeList");
     for (v in volumes) {
@@ -116,7 +212,7 @@ var fillcolormapSelector = function () {
     }
 }
 
-window.onload = function () {
+window.onload = async function () {
     fillVolumeSelector();
     fillcolormapSelector();
 
@@ -126,8 +222,8 @@ window.onload = function () {
     }
 
     // Get a GPU device to render with
-    var adapter = await navigator.gpu.requestAdapter();
-    var device = await adapter.requestDevice();
+    adapter = await navigator.gpu.requestAdapter();
+    device = await adapter.requestDevice();
 
     // Get a context to display our rendered image on the canvas
     var canvas = document.getElementById("webgpu-canvas");
@@ -861,7 +957,7 @@ window.onload = function () {
     };
 
     // Specify vertex data
-    var dataBuf = device.createBuffer({
+    dataBuf = device.createBuffer({
         size: 14 * 3 * 4,
         usage: GPUBufferUsage.VERTEX,
         mappedAtCreation: true,
@@ -887,7 +983,7 @@ window.onload = function () {
 
     // Setup render outputs
     var swapChainFormat = "bgra8unorm";
-    var swapChain = context.configureSwapChain({
+    swapChain = context.configureSwapChain({
         device: device,
         format: swapChainFormat,
         usage: GPUTextureUsage.OUTPUT_ATTACHMENT
@@ -938,31 +1034,31 @@ window.onload = function () {
     var layout = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
 
     // Create a buffer to store the volume data
-    var volumeDataBuffer = device.createBuffer({
+    volumeDataBuffer = device.createBuffer({
         size: 64 * 64 * 64 * 1,
-        usage: GPUBufferUsage.UNIFORM
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
     // Create a buffer to store the selected color maps
-    var colorMapBuffer = device.createBuffer({
-        size: 16 * 4 + 2 * 3 * 4,
-        usage: GPUBufferUsage.UNIFORM
+    colorMapBuffer = device.createBuffer({
+        size: 180 * 1 * 4 * 1,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
     // Create a buffer to store the volume parameters
-    var volumeParamsBuffer = device.createBuffer({
-        size: 16 * 4 + 2 * 3 * 4,
+    volumeParamsBuffer = device.createBuffer({
+        size: 3 * 1 + 4,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
     // Create a buffer to store the view parameters
-    var viewParamsBuffer = device.createBuffer({
+    viewParamsBuffer = device.createBuffer({
         size: 16 * 4 + 2 * 3 * 4,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
     // Create a bind group which places our view params buffer at binding 0
-    var bindGroup = device.createBindGroup({
+    bindGroup = device.createBindGroup({
         layout: bindGroupLayout,
         entries: [
             {
@@ -993,7 +1089,7 @@ window.onload = function () {
     });
 
     // Create render pipeline
-    var renderPipeline = device.createRenderPipeline({
+    renderPipeline = device.createRenderPipeline({
         layout: layout,
         vertexStage: vertexStage,
         fragmentStage: fragmentStage,
@@ -1009,7 +1105,7 @@ window.onload = function () {
         }
     });
 
-    var renderPassDesc = {
+    renderPassDesc = {
         colorAttachments: [{
             attachment: undefined,
             loadValue: [0.3, 0.3, 0.3, 1]
@@ -1023,34 +1119,25 @@ window.onload = function () {
         }
     };
 
-    // Not covered in the tutorial: track when the canvas is visible
-    // on screen, and only render when it is visible.
-    var canvasVisible = false;
-    var observer = new IntersectionObserver(function (e) {
-        if (e[0].isIntersecting) {
-            canvasVisible = true;
-        } else {
-            canvasVisible = false;
-        }
-    }, { threshold: [0] });
-    observer.observe(canvas);
+    // Load the default colormap and upload it, after which we
+    // load the default volume.
+    var colormapImage = new Image();
+    colormapImage.onload = async function () {
+        // Compute and upload the colormap
+        upload = device.createBuffer({
+            size: 180 * 4,
+            usage: GPUBufferUsage.COPY_SRC,
+            mappedAtCreation: true
+        })
+        new Uint8Array(upload.getMappedRange()).set(colorMap);
+        upload.unmap();
 
-    var frame = function () {
-        if (canvasVisible) {
-            renderPassDesc.colorAttachments[0].attachment = swapChain.getCurrentTexture().createView();
+        var commandEncoder = device.createCommandEncoder();
 
-            var commandEncoder = device.createCommandEncoder();
+        commandEncoder.copyBufferToBuffer(upload, 0, colorMapBuffer, 0, 180 * 4);
 
-            var renderPass = commandEncoder.beginRenderPass(renderPassDesc);
-
-            renderPass.setPipeline(renderPipeline);
-            renderPass.setVertexBuffer(0, dataBuf);
-            renderPass.draw(3, 1, 0, 0);
-
-            renderPass.endPass();
-            device.defaultQueue.submit([commandEncoder.finish()]);
-        }
-        requestAnimationFrame(frame);
-    }
-    requestAnimationFrame(frame);
+        selectVolume();
+    };
+    colormapImage.src = "colormaps/cool-warm-paraview.png";
+    //TODO add the functionality to not render when canvas is off screen
 }
