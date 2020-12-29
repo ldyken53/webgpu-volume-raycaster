@@ -110,11 +110,11 @@ var selectVolume = function () {
 
     loadVolume(volumes[selection], function (file, dataBuffer) {
         var m = file.match(fileRegex);
-        var volDims = [parseInt(m[2]), parseInt(m[3]), parseInt(m[4])];
+        var volDims = [parseFloat(m[2]), parseFloat(m[3]), parseFloat(m[4])];
 
         var longestAxis = Math.max(volDims[0], Math.max(volDims[1], volDims[2]));
-        var volScale = new Float32Array(3).set([volDims[0] / longestAxis, volDims[1] / longestAxis,
-        volDims[2] / longestAxis]);
+        var volScale = [volDims[0] / longestAxis, volDims[1] / longestAxis,
+        volDims[2] / longestAxis];
 
         // Upload the volume data
         upload = device.createBuffer({
@@ -144,28 +144,34 @@ var selectVolume = function () {
 
             // Compute and upload the combined projection and view matrix
             projView = mat4.mul(projView, proj, camera.camera);
-            var eye = new Float32Array(3).set([camera.invCamera[12], camera.invCamera[13], camera.invCamera[14]]);
+            var eye = [camera.invCamera[12], camera.invCamera[13], camera.invCamera[14]];
             var upload = device.createBuffer({
                 size: 16 * 4 + 2 * 3 * 4,
                 usage: GPUBufferUsage.COPY_SRC,
                 mappedAtCreation: true
             });
-            new Float32Array(upload.getMappedRange()).set(projView + eye + volScale);
+            var map = new Float32Array(upload.getMappedRange());
+            map.set(projView);
+            map.set(eye, 16);
+            map.set(volScale, 19);
             upload.unmap();
 
             // Compute and upload the volume params
             var test = device.createBuffer({
-                size: 3 * 1 + 4,
+                size: 3 * 4 + 4,
                 usage: GPUBufferUsage.COPY_SRC,
                 mappedAtCreation: true
             })
-            new Uint8Array(test.getMappedRange()).set(volDims + [samplingRate]);
+            // TODO have to separate volume dims because float vs int
+            var map = new Float32Array(test.getMappedRange());
+            map.set(volDims);
+            map.set([samplingRate], 3);
             upload.unmap();
 
             var commandEncoder = device.createCommandEncoder();
 
             commandEncoder.copyBufferToBuffer(upload, 0, viewParamsBuffer, 0, 16 * 4 + 2 * 3 * 4);
-            commandEncoder.copyBufferToBuffer(upload, 0, volumeParamsBuffer, 0, 3 * 1 + 4);
+            commandEncoder.copyBufferToBuffer(upload, 0, volumeParamsBuffer, 0, 3 * 4 + 4);
 
             var renderPass = commandEncoder.beginRenderPass(renderPassDesc);
 
@@ -1013,7 +1019,7 @@ window.onload = async function () {
                 binding: 1,
                 // One or more stage flags, or'd together
                 visibility: GPUShaderStage.FRAGMENT,
-                type: "uniform-buffer"
+                type: "storage-buffer"
             },
             {
                 binding: 2,
@@ -1036,7 +1042,7 @@ window.onload = async function () {
     // Create a buffer to store the volume data
     volumeDataBuffer = device.createBuffer({
         size: 64 * 64 * 64 * 1,
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
     });
 
     // Create a buffer to store the selected color maps
@@ -1047,7 +1053,7 @@ window.onload = async function () {
 
     // Create a buffer to store the volume parameters
     volumeParamsBuffer = device.createBuffer({
-        size: 3 * 1 + 4,
+        size: 3 * 4 + 4,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
