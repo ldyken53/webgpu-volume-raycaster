@@ -2,31 +2,24 @@
 #define CUBE_SIZE 64.0
 precision highp int;
 precision highp float;
-layout(set = 0, binding = 1) uniform highp sampler2D volume;
-layout(set = 0, binding = 2) uniform highp sampler2D colormap;
+layout(set = 0, binding = 1) buffer volumeData {
+	float data[];
+};
+layout(set = 0, binding = 2) uniform texture2D colormap;
 layout(set = 0, binding = 3) uniform VolumeParams {
 	ivec3 volume_dims;
 	float dt_scale;
 };
+layout(set = 0, binding = 4) uniform sampler mySampler;
 
 layout(location = 0) in vec3 vray_dir;
 layout(location = 1) flat in vec3 transformed_eye;
 
 layout(location = 0) out vec4 color;
 
-vec4 sampleAs3DTexture(sampler2D tex, vec3 texCoord, float size) {
-    float sliceSize = 1.0 / size;                         // space of 1 slice
-    float slicePixelSize = sliceSize / size;              // space of 1 pixel
-    float sliceInnerSize = slicePixelSize * (size - 1.0); // space of size pixels
-    float zSlice0 = min(floor(texCoord.z * size), size - 1.0);
-    float zSlice1 = min(zSlice0 + 1.0, size - 1.0);
-    float xOffset = slicePixelSize * 0.5 + texCoord.x * sliceInnerSize;
-    float s0 = xOffset + (zSlice0 * sliceSize);
-    float s1 = xOffset + (zSlice1 * sliceSize);
-    vec4 slice0Color = texture(tex, vec2(s0, texCoord.y));
-    vec4 slice1Color = texture(tex, vec2(s1, texCoord.y));
-    float zOffset = mod(texCoord.z * size, 1.0);
-    return mix(slice0Color, slice1Color, zOffset);
+float sampleVoxel(vec3 texCoord) {
+	ivec3 tex = ivec3(texCoord);
+    return data[tex.x+tex.y*64+tex.z*64*64];
 }
 
 vec2 intersect_box(vec3 orig, vec3 dir) {
@@ -70,8 +63,8 @@ void main(void) {
 	float offset = wang_hash(int(gl_FragCoord.x + 640.0 * gl_FragCoord.y));
 	vec3 p = transformed_eye + (t_hit.x + offset * dt) * ray_dir;
 	for (float t = t_hit.x; t < t_hit.y; t += dt) {
-		float val = sampleAs3DTexture(volume, p, CUBE_SIZE).r;
-		vec4 val_color = vec4(texture(colormap, vec2(val, 0.5)).rgb, val);
+		float val = sampleVoxel(p);
+		vec4 val_color = vec4(texture(sampler2D(colormap, mySampler), vec2(val, 0.5)).rgb, val);
 		// Opacity correction
 		val_color.a = 1.0 - pow(1.0 - val_color.a, dt_scale);
 		color.rgb += (1.0 - color.a) * val_color.a * val_color.rgb;
