@@ -290,7 +290,7 @@
     });
 
     var volumeDataBuffer = device.createBuffer({
-        size: 64 * 64 * 64 * 1,
+        size: 64 * 64 * 64 * 4,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
     });
 
@@ -310,7 +310,7 @@
                 binding: 1,
                 resource: {
                     buffer: volumeDataBuffer,
-                    size: 64 * 64 * 64 * 1,
+                    size: 64 * 64 * 64 * 4,
                     offset: 0
                 }
             }
@@ -319,22 +319,21 @@
 
     // Buffer the volume data
     var upload = device.createBuffer({
-        size: 64 * 64 * 64 * 1,
+        size: 64 * 64 * 64 * 4,
         usage: GPUBufferUsage.COPY_SRC,
         mappedAtCreation: true
     });
     {
-        var map = new Uint8Array(upload.getMappedRange());
-        var test = new Uint8Array(64 * 64 * 64 * 1).fill(1);
-        console.log(test);
-        map.set(test);
+        var map = new Uint32Array(upload.getMappedRange()).fill(1);
+        // var test = new Uint32Array(64 * 64 * 64 * 1).fill(1);
+        // map.set(test);
     }
     upload.unmap();
 
     var commandEncoder = device.createCommandEncoder();
 
     // Copy the upload buffer to our storage buffer
-    commandEncoder.copyBufferToBuffer(upload, 0, volumeDataBuffer, 0, 64 * 64 * 64 * 1);
+    commandEncoder.copyBufferToBuffer(upload, 0, volumeDataBuffer, 0, 64 * 64 * 64 * 4);
 
     // Create an arcball camera and view projection matrix
     var camera = new ArcballCamera([0, 0, 3], [0, 0, 0], [0, 1, 0],

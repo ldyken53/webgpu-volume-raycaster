@@ -4,7 +4,7 @@ layout(location = 0) in vec3 vray_dir;
 layout(location = 1) flat in vec3 transformed_eye;
 
 layout(set = 0, binding = 1, std140) buffer VolumeData {
-	uint data[64*64*64];
+	uint data[];
 } volumeData;
 
 layout(location = 0) out vec4 color;
