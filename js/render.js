@@ -301,13 +301,17 @@
             {
                 binding: 0,
                 resource: {
-                    buffer: viewParamsBuffer
+                    buffer: viewParamsBuffer,
+                    size: 20 * 4,
+                    offset: 0
                 }
             },
             {
                 binding: 1,
                 resource: {
-                    buffer: volumeDataBuffer
+                    buffer: volumeDataBuffer,
+                    size: 64 * 64 * 64 * 1,
+                    offset: 0
                 }
             }
         ]
@@ -321,7 +325,7 @@
     });
     {
         var map = new Uint8Array(upload.getMappedRange());
-        var test = new Uint8Array(64 * 64 * 64).fill(1);
+        var test = new Uint8Array(64 * 64 * 64 * 1).fill(1);
         console.log(test);
         map.set(test);
     }
@@ -329,7 +333,7 @@
 
     var commandEncoder = device.createCommandEncoder();
 
-    // Copy the upload buffer to our uniform buffer
+    // Copy the upload buffer to our storage buffer
     commandEncoder.copyBufferToBuffer(upload, 0, volumeDataBuffer, 0, 64 * 64 * 64 * 1);
 
     // Create an arcball camera and view projection matrix

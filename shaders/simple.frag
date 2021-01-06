@@ -3,9 +3,9 @@
 layout(location = 0) in vec3 vray_dir;
 layout(location = 1) flat in vec3 transformed_eye;
 
-layout(set = 0, binding = 1) buffer volumeData {
-	int data[];
-};
+layout(set = 0, binding = 1, std140) buffer VolumeData {
+	uint data[64*64*64];
+} volumeData;
 
 layout(location = 0) out vec4 color;
 
@@ -62,6 +62,6 @@ void main(void) {
 	// 	}
 	// 	p += ray_dir * dt;
 	// }
-    color = vec4(vec3(data[0]), 1);
+    color = vec4(vec3(volumeData.data[0]), 1);
 }
 
