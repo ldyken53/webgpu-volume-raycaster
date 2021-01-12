@@ -317,6 +317,14 @@
         ]
     });
 
+    function pos(arr) {
+        return arr.reduce((ret_arr, number, index) => {
+            if (number > 0) ret_arr.push(index)
+            return ret_arr
+        }, [])
+
+    }
+
     // Buffer the volume data
     var upload = device.createBuffer({
         size: 64 * 64 * 64 * 4,
@@ -324,9 +332,8 @@
         mappedAtCreation: true
     });
     {
-        var map = new Uint32Array(upload.getMappedRange()).fill(1);
-        // var test = new Uint32Array(64 * 64 * 64 * 1).fill(1);
-        // map.set(test);
+        var map = new Uint32Array(upload.getMappedRange());
+        map.set(dataBuffer);
     }
     upload.unmap();
 
@@ -334,6 +341,7 @@
 
     // Copy the upload buffer to our storage buffer
     commandEncoder.copyBufferToBuffer(upload, 0, volumeDataBuffer, 0, 64 * 64 * 64 * 4);
+    device.defaultQueue.submit([commandEncoder.finish()]);
 
     // Create an arcball camera and view projection matrix
     var camera = new ArcballCamera([0, 0, 3], [0, 0, 0], [0, 1, 0],
