@@ -6,8 +6,8 @@ layout(location = 1) flat in vec3 transformed_eye;
 layout(set = 0, binding = 1) buffer VolumeData {
 	uint data[];
 } volumeData;
-// layout(set = 0, binding = 2) uniform texture2D colormap;
-// layout(set = 0, binding = 3) uniform sampler mySampler;
+layout(set = 0, binding = 2) uniform texture2D colormap;
+layout(set = 0, binding = 3) uniform sampler mySampler;
 
 layout(location = 0) out vec4 color;
 
@@ -39,7 +39,7 @@ void main(void) {
 	t_hit.x = max(t_hit.x, 0.0);
 
 	// Step 3: Compute the step size to march through the volume grid
-	vec3 dt_vec = 1.0 / (vec3(64.0, 64.0, 64.0) * abs(ray_dir));
+	vec3 dt_vec = 1.0 / (vec3(64) * abs(ray_dir));
 	float dt = min(dt_vec.x, min(dt_vec.y, dt_vec.z));
 
 	// Step 4: Starting from the entry point, march the ray through the volume
@@ -49,9 +49,9 @@ void main(void) {
 		// Step 4.1: Sample the volume, and color it by the transfer function.
 		// Note that here we don't use the opacity from the transfer function,
 		// and just use the sample value as the opacity
-		ivec3 h = ivec3(p);
+		ivec3 h = ivec3(p.x*63, p.y*63, p.z*63);
 		uint val = volumeData.data[h.x+h.y*64+h.z*64*64];
-		vec4 val_color = vec4(vec3(val/255.0), val/255.0);
+		vec4 val_color = vec4(vec3(0), val/255.0);
 
 		// Step 4.2: Accumulate the color and opacity using the front-to-back
 		// compositing equation
@@ -64,5 +64,7 @@ void main(void) {
 		}
 		p += ray_dir * dt;
 	}
+	// vec4 val_color = vec4(texture(sampler2D(colormap, mySampler), vec2(0, 0.5)).rgb, val/255.0);
+	// color = vec4(0);
 }
 

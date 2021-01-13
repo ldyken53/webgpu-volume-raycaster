@@ -243,7 +243,19 @@
                 binding: 1,
                 visibility: GPUShaderStage.FRAGMENT,
                 type: "storage-buffer"
-            }
+            },
+            {
+                binding: 2,
+                // One or more stage flags, or'd together
+                visibility: GPUShaderStage.FRAGMENT,
+                type: "sampled-texture"
+            },
+            {
+                binding: 3,
+                // One or more stage flags, or'd together
+                visibility: GPUShaderStage.FRAGMENT,
+                type: "sampler"
+            },
         ]
     });
 
@@ -283,6 +295,27 @@
         }
     };
 
+    // Load the default colormap and upload it
+    var colormapImage = new Image();
+    colormapImage.src = "colormaps/cool-warm-paraview.png";
+    await colormapImage.decode();
+    const imageBitmap = await createImageBitmap(colormapImage);
+    var colorTexture = device.createTexture({
+        size: [imageBitmap.width, imageBitmap.height, 1],
+        format: "rgba8unorm",
+        usage: GPUTextureUsage.SAMPLED | GPUTextureUsage.COPY_DST,
+    });
+    device.defaultQueue.copyImageBitmapToTexture(
+        { imageBitmap }, { texture: colorTexture },
+        [imageBitmap.width, imageBitmap.height, 1]
+    );
+
+    // Create our sampler
+    const sampler = device.createSampler({
+        magFilter: "linear",
+        minFilter: "linear"
+    });
+
     // Create a buffer to store the view parameters
     var viewParamsBuffer = device.createBuffer({
         size: 20 * 4,
@@ -313,10 +346,19 @@
                     size: 64 * 64 * 64 * 4,
                     offset: 0
                 }
-            }
+            },
+            {
+                binding: 2,
+                resource: colorTexture.createView(),
+            },
+            {
+                binding: 3,
+                resource: sampler,
+            },
         ]
     });
 
+    // Debug function
     function pos(arr) {
         return arr.reduce((ret_arr, number, index) => {
             if (number > 0) ret_arr.push(index)
