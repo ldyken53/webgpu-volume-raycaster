@@ -51,7 +51,7 @@ void main(void) {
 		// and just use the sample value as the opacity
 		ivec3 h = ivec3(p.x*63, p.y*63, p.z*63);
 		uint val = volumeData.data[h.x+h.y*64+h.z*64*64];
-		vec4 val_color = vec4(vec3(0), val/255.0);
+		vec4 val_color = vec4(1, 0, 0, val/255.0);
 
 		// Step 4.2: Accumulate the color and opacity using the front-to-back
 		// compositing equation
@@ -65,6 +65,5 @@ void main(void) {
 		p += ray_dir * dt;
 	}
 	// vec4 val_color = vec4(texture(sampler2D(colormap, mySampler), vec2(0, 0.5)).rgb, val/255.0);
-	// color = vec4(0);
 }
 

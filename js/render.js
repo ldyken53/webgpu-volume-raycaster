@@ -272,7 +272,11 @@
         },
         vertexState: vertexState,
         colorStates: [{
-            format: swapChainFormat
+            format: swapChainFormat,
+            alphaBlend: {
+                srcFactor: 'one',
+                dstFactor: 'one-minus-src-alpha',
+            },
         }],
         depthStencilState: {
             format: depthFormat,
