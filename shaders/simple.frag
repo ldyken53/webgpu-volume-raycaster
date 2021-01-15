@@ -46,12 +46,13 @@ void main(void) {
 	// and sample it
 	vec3 p = transformed_eye + t_hit.x * ray_dir;
 	for (float t = t_hit.x; t < t_hit.y; t += dt) {
+	// for (int i = 0; i < 50; i++){
 		// Step 4.1: Sample the volume, and color it by the transfer function.
 		// Note that here we don't use the opacity from the transfer function,
 		// and just use the sample value as the opacity
 		ivec3 h = ivec3(p.x*63, p.y*63, p.z*63);
 		uint val = volumeData.data[h.x+h.y*64+h.z*64*64];
-		vec4 val_color = vec4(1, 0, 0, val/255.0);
+		vec4 val_color = vec4(texture(sampler2D(colormap, mySampler), vec2(val, 0.5)).rgb, val/255.0);
 
 		// Step 4.2: Accumulate the color and opacity using the front-to-back
 		// compositing equation
