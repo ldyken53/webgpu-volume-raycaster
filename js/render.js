@@ -275,7 +275,11 @@
             format: swapChainFormat,
             alphaBlend: {
                 srcFactor: 'one',
-                dstFactor: 'one-minus-src-alpha',
+                dstFactor: 'one-minus-src-alpha'
+            },
+            colorBlend: {
+                srcFactor: 'one',
+                dstFactor: 'one-minus-src-alpha'
             },
         }],
         depthStencilState: {
