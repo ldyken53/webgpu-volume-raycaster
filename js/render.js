@@ -396,7 +396,7 @@
     // Create an arcball camera and view projection matrix
     var camera = new ArcballCamera([0, 0, 3], [0, 0, 0], [0, 1, 0],
         0.5, [canvas.width, canvas.height]);
-    var projection = mat4.perspective(mat4.create(), 50 * Math.PI / 180.0,
+    var projection = mat4.perspective(mat4.create(), 25 * Math.PI / 180.0,
         canvas.width / canvas.height, 0.1, 100);
     // Matrix which will store the computed projection * view matrix
     var projView = mat4.create();
