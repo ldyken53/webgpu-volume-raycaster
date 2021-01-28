@@ -112,7 +112,7 @@ function makeBufferRequest(method, url) {
         }
         upload.unmap();
 
-        var volumeDims = getVolumeDimensions(datasets[selection].name);
+        var volDims = getVolumeDimensions(datasets[selection].name);
         // Buffer the volume dimensions
         var dims = device.createBuffer({
             size: 3 * 4,
@@ -121,15 +121,32 @@ function makeBufferRequest(method, url) {
         });
         {
             var map = new Uint32Array(dims.getMappedRange());
-            map.set(volumeDims);
+            map.set(volDims);
         }
         dims.unmap();
+
+        // Buffer the correct volume scale
+        var longestAxis = Math.max(volDims[0], Math.max(volDims[1], volDims[2]));
+        var volScale = [volDims[0] / longestAxis, volDims[1] / longestAxis,
+        volDims[2] / longestAxis];
+        // Buffer the volume dimensions
+        var scale = device.createBuffer({
+            size: 3 * 4,
+            usage: GPUBufferUsage.COPY_SRC,
+            mappedAtCreation: true
+        });
+        {
+            var map = new Float32Array(scale.getMappedRange());
+            map.set(volScale);
+        }
+        scale.unmap();
 
         var commandEncoder = device.createCommandEncoder();
 
         // Copy the upload buffer to our storage buffer
         commandEncoder.copyBufferToBuffer(upload, 0, volumeDataBuffer, 0, 256 * 256 * 256 * 4);
         commandEncoder.copyBufferToBuffer(dims, 0, volumeDimsBuffer, 0, 3 * 4);
+        commandEncoder.copyBufferToBuffer(scale, 0, volumeScaleBuffer, 0, 3 * 4);
         device.defaultQueue.submit([commandEncoder.finish()]);
     }
 
@@ -285,7 +302,12 @@ function makeBufferRequest(method, url) {
                 binding: 4,
                 visibility: GPUShaderStage.FRAGMENT,
                 type: "uniform-buffer"
-            }
+            },
+            {
+                binding: 5,
+                visibility: GPUShaderStage.VERTEX,
+                type: "uniform-buffer"
+            },
         ]
     });
 
@@ -370,6 +392,11 @@ function makeBufferRequest(method, url) {
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
+    var volumeScaleBuffer = device.createBuffer({
+        size: 3 * 4,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
     // Create a bind group which places our view params buffer at binding 0
     var bindGroup = device.createBindGroup({
         layout: bindGroupLayout,
@@ -405,18 +432,17 @@ function makeBufferRequest(method, url) {
                     size: 3 * 4,
                     offset: 0
                 }
+            },
+            {
+                binding: 5,
+                resource: {
+                    buffer: volumeScaleBuffer,
+                    size: 3 * 4,
+                    offset: 0
+                }
             }
         ]
     });
-
-    // Debug function
-    function pos(arr) {
-        return arr.reduce((ret_arr, number, index) => {
-            if (number > 0) ret_arr.push(index)
-            return ret_arr
-        }, [])
-
-    }
 
     await selectVolume();
 
@@ -473,14 +499,14 @@ function makeBufferRequest(method, url) {
             // Upload the combined projection and view matrix
             projView = mat4.mul(projView, projection, camera.camera);
             var upload = device.createBuffer({
-                size: 20 * 4,
+                size: 23 * 4,
                 usage: GPUBufferUsage.COPY_SRC,
                 mappedAtCreation: true
             });
             {
                 var map = new Float32Array(upload.getMappedRange());
                 map.set(projView);
-                map.set(camera.eyePos(), 16)
+                map.set(camera.eyePos(), 16);
             }
             upload.unmap();
 

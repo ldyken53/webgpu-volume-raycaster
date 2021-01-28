@@ -9,12 +9,14 @@ layout(set = 0, binding = 0, std140) uniform ViewParams {
     mat4 proj_view;
     vec4 eye_pos;
 };
+layout(set = 0, binding = 5) uniform volumeScale {
+    vec3 volume_scale;
+};
 
 void main(void) {
-    vec3 volume_translation = vec3(-0.5);
-    gl_Position = proj_view * vec4(pos + volume_translation, 1);
-
-    transformed_eye = eye_pos.xyz - volume_translation;
-    vray_dir = pos - transformed_eye;
+	vec3 volume_translation = vec3(0) - volume_scale * 0.5;
+	gl_Position = proj_view * vec4(pos * volume_scale + volume_translation, 1);
+	transformed_eye = (eye_pos.xyz - volume_translation) / volume_scale;
+	vray_dir = pos - transformed_eye;
 }
 

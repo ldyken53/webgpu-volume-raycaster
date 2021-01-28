@@ -61,7 +61,7 @@ void main(void) {
 	t_hit.x = max(t_hit.x, 0.0);
 
 	// Step 3: Compute the step size to march through the volume grid
-	vec3 dt_vec = 1.0 / (vec3(64) * abs(ray_dir));
+	vec3 dt_vec = 1.0 / (volumeDims * abs(ray_dir));
 	float dt = min(dt_vec.x, min(dt_vec.y, dt_vec.z));
 
 	// Step 4: Starting from the entry point, march the ray through the volume
