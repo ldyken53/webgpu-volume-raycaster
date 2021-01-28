@@ -1,44 +1,91 @@
-(async () => {
-    function makeBufferRequest(method, url) {
-        return new Promise(function (resolve, reject) {
-            let xhr = new XMLHttpRequest();
-            xhr.open(method, url);
-            xhr.responseType = "arraybuffer";
-            xhr.onload = function () {
-                if (this.status >= 200 && this.status < 300) {
-                    dataBuffer = xhr.response;
-                    if (dataBuffer) {
-                        dataBuffer = new Uint8Array(dataBuffer);
-                    } else {
-                        alert("Unable to load buffer properly from volume?");
-                        console.log("no buffer?");
-                    }
-                    resolve(xhr.response);
+var dataBuffer = null;
+var device = null;
+
+var datasets = {
+    "Fuel": {
+        name: "7d87jcsh0qodk78/fuel_64x64x64_uint8.raw",
+        range: [0, 255],
+        scale: [1, 1, 1]
+    },
+    "Neghip": {
+        name: "zgocya7h33nltu9/neghip_64x64x64_uint8.raw",
+        range: [0, 255],
+        scale: [1, 1, 1]
+    },
+    "Hydrogen Atom": {
+        name: "jwbav8s3wmmxd5x/hydrogen_atom_128x128x128_uint8.raw",
+        range: [0, 255],
+        scale: [1, 1, 1]
+    },
+    "Boston Teapot": {
+        name: "w4y88hlf2nbduiv/boston_teapot_256x256x178_uint8.raw",
+        range: [0, 255],
+        scale: [1, 1, 1]
+    },
+    "Engine": {
+        name: "ld2sqwwd3vaq4zf/engine_256x256x128_uint8.raw",
+        range: [0, 255],
+        scale: [1, 1, 1]
+    },
+    "Bonsai": {
+        name: "rdnhdxmxtfxe0sa/bonsai_256x256x256_uint8.raw",
+        range: [0, 255],
+        scale: [1, 1, 1]
+    },
+    "Foot": {
+        name: "ic0mik3qv4vqacm/foot_256x256x256_uint8.raw",
+        range: [0, 255],
+        scale: [1, 1, 1]
+    },
+    "Skull": {
+        name: "5rfjobn0lvb7tmo/skull_256x256x256_uint8.raw",
+        range: [0, 255],
+        scale: [1, 1, 1]
+    },
+    "Aneurysm": {
+        name: "3ykigaiym8uiwbp/aneurism_256x256x256_uint8.raw",
+        range: [0, 255],
+        scale: [1, 1, 1]
+    }
+}
+
+function makeBufferRequest(method, url) {
+    return new Promise(function (resolve, reject) {
+        let xhr = new XMLHttpRequest();
+        xhr.open(method, url);
+        xhr.responseType = "arraybuffer";
+        xhr.onload = function () {
+            if (this.status >= 200 && this.status < 300) {
+                dataBuffer = xhr.response;
+                if (dataBuffer) {
+                    dataBuffer = new Uint8Array(dataBuffer);
                 } else {
-                    reject({
-                        status: this.status,
-                        statusText: xhr.statusText
-                    });
+                    alert("Unable to load buffer properly from volume?");
+                    console.log("no buffer?");
                 }
-            };
-            xhr.onerror = function () {
+                resolve(xhr.response);
+            } else {
                 reject({
                     status: this.status,
                     statusText: xhr.statusText
                 });
-            };
-            xhr.send();
-        });
-    }
+            }
+        };
+        xhr.onerror = function () {
+            reject({
+                status: this.status,
+                statusText: xhr.statusText
+            });
+        };
+        xhr.send();
+    });
+}
 
-    var dataBuffer = null;
+(async () => {
     var adapter = await navigator.gpu.requestAdapter();
-
     var device = await adapter.requestDevice();
-
     var canvas = document.getElementById("webgpu-canvas");
     var context = canvas.getContext("gpupresent");
-    var original = [];
 
     var fileRegex = /(\w+)_(\d+)x(\d+)x(\d+)_(\w+)\.*/;
 
@@ -47,25 +94,63 @@
         return [parseInt(m[2]), parseInt(m[3]), parseInt(m[4])];
     }
 
-    var datasets = {
-        fuel: {
-            name: "7d87jcsh0qodk78/fuel_64x64x64_uint8.raw",
-            range: [0, 255],
-            scale: [1, 1, 1]
+    async function selectVolume() {
+        var selection = document.getElementById("volumeList").value;
+        history.replaceState(history.state, "#" + selection, "#" + selection);
+
+        var url = "https://www.dl.dropboxusercontent.com/s/" + datasets[selection].name + "?dl=1";
+        await makeBufferRequest("GET", url);
+        // Buffer the volume data
+        var upload = device.createBuffer({
+            size: 256 * 256 * 256 * 4,
+            usage: GPUBufferUsage.COPY_SRC,
+            mappedAtCreation: true
+        });
+        {
+            var map = new Uint32Array(upload.getMappedRange());
+            map.set(dataBuffer);
+        }
+        upload.unmap();
+
+        var volumeDims = getVolumeDimensions(datasets[selection].name);
+        // Buffer the volume dimensions
+        var dims = device.createBuffer({
+            size: 3 * 4,
+            usage: GPUBufferUsage.COPY_SRC,
+            mappedAtCreation: true
+        });
+        {
+            var map = new Uint32Array(dims.getMappedRange());
+            map.set(volumeDims);
+        }
+        dims.unmap();
+
+        var commandEncoder = device.createCommandEncoder();
+
+        // Copy the upload buffer to our storage buffer
+        commandEncoder.copyBufferToBuffer(upload, 0, volumeDataBuffer, 0, 256 * 256 * 256 * 4);
+        commandEncoder.copyBufferToBuffer(dims, 0, volumeDimsBuffer, 0, 3 * 4);
+        device.defaultQueue.submit([commandEncoder.finish()]);
+    }
+
+    async function fillVolumeSelector() {
+        var selector = document.getElementById("volumeList");
+        selector.onchange = selectVolume;
+        for (v in datasets) {
+            var opt = document.createElement("option");
+            opt.value = v;
+            opt.innerHTML = v;
+            selector.appendChild(opt);
         }
     }
 
-    var dataset = datasets.fuel;
+    await fillVolumeSelector();
+
     if (window.location.hash) {
         var name = decodeURI(window.location.hash.substr(1));
         console.log(`Linked to data set ${name}`);
         dataset = datasets[name];
     }
-
-    var url = "https://www.dl.dropboxusercontent.com/s/" + dataset.name + "?dl=1";
-    await makeBufferRequest("GET", url);
-
-    var volumeDims = getVolumeDimensions(dataset.name);
 
     // Setup shader modules
     var vertModule = device.createShaderModule({ code: simple_vert_spv });
@@ -137,56 +222,6 @@
     ]);
     dataBuf.unmap();
 
-    var colorBuf = device.createBuffer({
-        size: 12 * 3 * 3 * 4,
-        usage: GPUBufferUsage.VERTEX,
-        mappedAtCreation: true,
-    });
-    new Float32Array(colorBuf.getMappedRange()).set([
-        1, 1, 1,
-        1, 1, 1,
-        1, 1, 1,
-        1, 1, 1,
-        1, 1, 1,
-        1, 1, 1,
-
-        1, 0, 0,
-        1, 0, 0,
-        1, 0, 0,
-        1, 0, 0,
-        1, 0, 0,
-        1, 0, 0,
-
-        0, 1, 0,
-        0, 1, 0,
-        0, 1, 0,
-        0, 1, 0,
-        0, 1, 0,
-        0, 1, 0,
-
-        0, 0, 1,
-        0, 0, 1,
-        0, 0, 1,
-        0, 0, 1,
-        0, 0, 1,
-        0, 0, 1,
-
-        1, 1, 0,
-        1, 1, 0,
-        1, 1, 0,
-        1, 1, 0,
-        1, 1, 0,
-        1, 1, 0,
-
-        0, 1, 1,
-        0, 1, 1,
-        0, 1, 1,
-        0, 1, 1,
-        0, 1, 1,
-        0, 1, 1
-    ]);
-    colorBuf.unmap();
-
     var vertexState = {
         vertexBuffers: [
             {
@@ -196,16 +231,6 @@
                         format: "float3",
                         offset: 0,
                         shaderLocation: 0
-                    }
-                ]
-            },
-            {
-                arrayStride: 3 * 4,
-                attributes: [
-                    {
-                        format: "float3",
-                        offset: 0,
-                        shaderLocation: 1
                     }
                 ]
             }
@@ -256,6 +281,11 @@
                 visibility: GPUShaderStage.FRAGMENT,
                 type: "sampler"
             },
+            {
+                binding: 4,
+                visibility: GPUShaderStage.FRAGMENT,
+                type: "uniform-buffer"
+            }
         ]
     });
 
@@ -331,8 +361,13 @@
     });
 
     var volumeDataBuffer = device.createBuffer({
-        size: 64 * 64 * 64 * 4,
+        size: 256 * 256 * 256 * 4,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+    });
+
+    var volumeDimsBuffer = device.createBuffer({
+        size: 3 * 4,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
     // Create a bind group which places our view params buffer at binding 0
@@ -351,7 +386,7 @@
                 binding: 1,
                 resource: {
                     buffer: volumeDataBuffer,
-                    size: 64 * 64 * 64 * 4,
+                    size: 256 * 256 * 256 * 4,
                     offset: 0
                 }
             },
@@ -363,6 +398,14 @@
                 binding: 3,
                 resource: sampler,
             },
+            {
+                binding: 4,
+                resource: {
+                    buffer: volumeDimsBuffer,
+                    size: 3 * 4,
+                    offset: 0
+                }
+            }
         ]
     });
 
@@ -375,23 +418,7 @@
 
     }
 
-    // Buffer the volume data
-    var upload = device.createBuffer({
-        size: 64 * 64 * 64 * 4,
-        usage: GPUBufferUsage.COPY_SRC,
-        mappedAtCreation: true
-    });
-    {
-        var map = new Uint32Array(upload.getMappedRange());
-        map.set(dataBuffer);
-    }
-    upload.unmap();
-
-    var commandEncoder = device.createCommandEncoder();
-
-    // Copy the upload buffer to our storage buffer
-    commandEncoder.copyBufferToBuffer(upload, 0, volumeDataBuffer, 0, 64 * 64 * 64 * 4);
-    device.defaultQueue.submit([commandEncoder.finish()]);
+    await selectVolume();
 
     // Create an arcball camera and view projection matrix
     var camera = new ArcballCamera([0, 0, 3], [0, 0, 0], [0, 1, 0],
@@ -466,7 +493,6 @@
 
             renderPass.setPipeline(renderPipeline);
             renderPass.setVertexBuffer(0, dataBuf);
-            renderPass.setVertexBuffer(1, colorBuf);
             renderPass.setBindGroup(0, bindGroup);
             renderPass.draw(12 * 3, 1, 0, 0);
 
