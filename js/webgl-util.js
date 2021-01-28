@@ -222,7 +222,7 @@ var compileShader = function(gl, vert, frag){
     return program;
 }
 
-var getGLExtension = function(ext) {
+var getGLExtension = function(gl, ext) {
     if (!gl.getExtension(ext)) {
         alert("Missing " + ext + " WebGL extension");
         return false;
@@ -322,7 +322,7 @@ ArcballCamera.prototype.updateCameraMatrix = function() {
 }
 
 ArcballCamera.prototype.eyePos = function() {
-    return [camera.invCamera[12], camera.invCamera[13], camera.invCamera[14]];
+    return [this.invCamera[12], this.invCamera[13], this.invCamera[14]];
 }
 
 ArcballCamera.prototype.eyeDir = function() {
@@ -385,7 +385,7 @@ var Buffer = function(capacity, dtype) {
 
 Buffer.prototype.append = function(buf) {
     if (this.len + buf.length >= this.capacity) {
-        var newCap = Math.floor(this.capacity * 1.5);
+        var newCap = Math.floor(Math.max(this.capacity * 1.5), this.len + buf.length);
         var tmp = new (this.buffer.constructor)(newCap);
         tmp.set(this.buffer);
 
