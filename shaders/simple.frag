@@ -11,6 +11,9 @@ layout(set = 0, binding = 3) uniform sampler mySampler;
 layout(set = 0, binding = 4) uniform volumeParams {
 	ivec3 volumeDims;
 };
+layout(set = 0, binding = 6) uniform Isovalue {
+	float isovalue;
+};
 
 layout(location = 0) out vec4 color;
 
@@ -67,24 +70,18 @@ void main(void) {
 	// Step 4: Starting from the entry point, march the ray through the volume
 	// and sample it
 	vec3 p = transformed_eye + t_hit.x * ray_dir;
-	// for (int i = 0; i < 50; i++){
+
 	for (float t = t_hit.x; t < t_hit.y; t += dt) {
 		// Step 4.1: Sample the volume, and color it by the transfer function.
 		// Note that here we don't use the opacity from the transfer function,
 		// and just use the sample value as the opacity
-		float val = trilinear_interpolate(p);
-		vec4 val_color = vec4(textureLod(sampler2D(colormap, mySampler), vec2(val, 0.5),  0.f).rgb, val);
-		// Step 4.2: Accumulate the color and opacity using the front-to-back
-		// compositing equation
-		color.rgb += (1.0 - color.a) * val_color.a * val_color.rgb;
-		color.a += (1.0 - color.a) * val_color.a;
-
-		// Optimization: break out of the loop when the color is near opaque
-		if (color.a >= 0.95) {
+		float val_in = trilinear_interpolate(p);
+		p += ray_dir * dt;
+		float val_out = trilinear_interpolate(p);
+		if (sign(val_in - isovalue) != sign(val_out - isovalue)){
+			color = vec4(0, 1, 0.5, 1);
 			break;
 		}
-		p += ray_dir * dt;
 	}
-	// vec4 val_color = vec4(texture(sampler2D(colormap, mySampler), vec2(0, 0.5)).rgb, val/255.0);
 }
 
