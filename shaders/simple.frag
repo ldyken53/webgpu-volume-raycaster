@@ -30,6 +30,14 @@ vec2 intersect_box(vec3 orig, vec3 dir) {
     return vec2(t0, t1);
 }
 
+vec2 quadratic_solve(float a, float b, float c) {
+	float D = b * b - 4 * a * c; // calculate discriminant squared
+	if (D > 0) {
+		D = sqrt(D);
+		return vec2((-b - D) / (2 * a), (-b + D) / (2 * a)); //return roots
+	}
+}
+
 float trilinear_interpolate(vec3 p) {
 	// Multiply elements of p by volume dimensions to get appropriate x, y, and z values
 	vec3 fitted_p = vec3(p.x*(volumeDims.x-1), p.y*(volumeDims.y-1), p.z*(volumeDims.z-1));
@@ -47,6 +55,33 @@ float trilinear_interpolate(vec3 p) {
 	float c2 = c12 * (1 - differences.y) + c22 * differences.y;
 	float c = c1 * (1 - differences.z) + c2 * differences.z;
 	return c / 255.0;
+}
+
+vec3 shading(vec3 N, vec3 V, vec3 L) {
+	vec3 Kd = vec3(0.6);
+	vec3 Ks = vec3(0.2);
+	float mean = 0.7;
+	float scale = 0.2;
+
+	vec3 lightIntensity = vec3(1);
+	vec3 H = normalize(L+V);
+	float n_h = dot(N,H);
+	float n_v = dot(N,V);
+	float v_h = dot(V,H);
+	float n_l = dot(N,L);
+
+	vec3 diffuse = Kd * max(n_l, 0);
+	float fresnel = pow(1.0 + v_h, 4);
+	float delta = acos(n_h).x;
+	float exponent = -pow((delta/mean), 2);
+	float microfacets = scale * exp(exponent);
+
+	float term1 = 2 * n_h * n_v/v_h;
+	float term2 = 2 * n_h * n_l/v_h;
+	float selfshadow = min(1, min(term1, term2));
+
+	vec3 specular = Ks * fresnel * microfacets * selfshadow / n_v;
+	return vec3(1) * (diffuse + specular);
 }
 
 void main(void) {
@@ -80,6 +115,15 @@ void main(void) {
 		float val_out = trilinear_interpolate(p);
 		if (sign(val_in - isovalue) != sign(val_out - isovalue)){
 			color = vec4(0, 1, 0.5, 1);
+			p = (p - ray_dir * dt) + (ray_dir * dt) * ((isovalue - val_in)/(val_out - val_in));
+			vec3 sample1 = vec3(trilinear_interpolate(p - vec3(0.01, 0, 0)), 
+				trilinear_interpolate(p - vec3(0, 0.01, 0)), trilinear_interpolate(p - vec3(0, 0, 0.01)));
+			vec3 sample2 = vec3(trilinear_interpolate(p + vec3(0.01, 0, 0)), 
+				trilinear_interpolate(p + vec3(0, 0.01, 0)), trilinear_interpolate(p + vec3(0, 0, 0.01)));
+			vec3 N = normalize(sample2-sample1);
+			vec3 L = normalize(vec3(255,0,200)-vray_dir);
+			vec3 V = normalize(transformed_eye-vray_dir);
+			color.rgb += shading(N, V, L);
 			break;
 		}
 	}
