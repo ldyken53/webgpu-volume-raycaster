@@ -30,9 +30,7 @@ vec2 intersect_box(vec3 orig, vec3 dir) {
     return vec2(t0, t1);
 }
 
-float trilinear_interpolate(vec3 p) {
-	// Multiply elements of p by volume dimensions to get appropriate x, y, and z values
-	vec3 fitted_p = vec3(p.x*(volumeDims.x-1), p.y*(volumeDims.y-1), p.z*(volumeDims.z-1));
+float trilinear_interpolate(vec3 fitted_p) {
 	ivec3 p1 = ivec3(fitted_p);
 	// Need to apply minimum so function doesn't try to interpolate when on x, y, or z edges
 	ivec3 p2 = ivec3(min(volumeDims.x-1, p1.x+1), min(volumeDims.x-1, p1.y+1), min(volumeDims.x-1, p1.z+1));
@@ -49,26 +47,23 @@ float trilinear_interpolate(vec3 p) {
 	return c / 255.0;
 }
 
-vec4 polynomial(vec3 origin, vec3 b0) {
-	// Multiply elements of p by volume dimensions to get appropriate x, y, and z values
-	vec3 fitted_p = vec3(origin.x*(volumeDims.x-1), origin.y*(volumeDims.y-1), origin.z*(volumeDims.z-1));
-	ivec3 p0 = ivec3(fitted_p);
-	// Need to apply minimum so function doesn't try to interpolate when on x, y, or z edges
-	ivec3 p1 = ivec3(min(volumeDims.x-1, p0.x+1), min(volumeDims.x-1, p0.y+1), min(volumeDims.x-1, p0.z+1));
+vec4 polynomial(vec3 fitted_origin, vec3 b0, ivec3 steps, ivec3 current_voxel) {
+	ivec3 current_voxel1 = current_voxel + steps;
 	// Keep track of the decimal portions 
 	const vec3 a[2] = vec3[2](
-		fitted_p-p0,
-		vec3(1) - (fitted_p-p0)
+		(current_voxel - fitted_origin)/(current_voxel1 - current_voxel),
+		(fitted_origin - current_voxel)/(current_voxel1 - current_voxel)
 	);
 	const vec3 b[2] = vec3[2](
-		b0,
-		vec3(1) - b0
+		b0/(current_voxel1 - current_voxel),
+		(-1 * b0)/(current_voxel1 - current_voxel)
 	);
 	const ivec3 p[2] = ivec3[2](
-		p0,
-		p1
+		current_voxel,
+		current_voxel1
 	);
 	vec4 poly = vec4(0);
+	poly.w = -1 * 255 * isovalue;
 	for (int i = 0; i < 2; i++) {
 		for (int j = 0; j < 2; j++) {
 			for (int k = 0; k < 2; k++) {
@@ -110,13 +105,13 @@ vec3 shading(vec3 N, vec3 V, vec3 L) {
 }
 
 float func(vec4 poly, float t) {
-	return (poly.x*pow(t,3)+poly.y*pow(t,2)+poly.z*t+poly.w)/255.0-isovalue;
+	return (poly.x*pow(t,3)+poly.y*pow(t,2)+poly.z*t+poly.w);
 }
 
 void main(void) {
     vec3 ray_dir = normalize(vray_dir);
 
-    // Step 2: Intersect the ray with the volume bounds to find the interval
+    // Intersect the ray with the volume bounds to find the interval
 	// along the ray overlapped by the volume.
 	vec2 t_hit = intersect_box(transformed_eye, ray_dir);
 	if (t_hit.x > t_hit.y) {
@@ -127,48 +122,64 @@ void main(void) {
 	// of the eye
 	t_hit.x = max(t_hit.x, 0.0);
 
-	// Step 3: Compute the step size to march through the volume grid
-	vec3 dt_vec = 1.0 / (volumeDims * abs(ray_dir));
-	float dt = min(dt_vec.x, min(dt_vec.y, dt_vec.z));
-
-	// Step 4: Starting from the entry point, march the ray through the volume
-	// and sample it
 	vec3 origin = transformed_eye + t_hit.x * ray_dir;
-	vec3 p = origin;
-	int dt_steps = 0;
-
-	// SIMPLE LINEAR INTERPOLATION
-	// for (float t = t_hit.x; t < t_hit.y; t += dt) {
-	// 	// Step 4.1: Sample the volume, and color it by the transfer function.
-	// 	// Note that here we don't use the opacity from the transfer function,
-	// 	// and just use the sample value as the opacity
-	// 	float val_in = trilinear_interpolate(p);
-	// 	p += ray_dir * dt;
-	// 	float val_out = trilinear_interpolate(p);
-	// 	if (sign(val_in - isovalue) != sign(val_out - isovalue)){
-	// 		color = vec4(0, 1, 0.5, 1);
-	// 		p = (p - ray_dir * dt) + (ray_dir * dt) * ((isovalue - val_in)/(val_out - val_in));
-	// 		vec3 sample1 = vec3(trilinear_interpolate(p - vec3(0.01, 0, 0)), 
-	// 			trilinear_interpolate(p - vec3(0, 0.01, 0)), trilinear_interpolate(p - vec3(0, 0, 0.01)));
-	// 		vec3 sample2 = vec3(trilinear_interpolate(p + vec3(0.01, 0, 0)), 
-	// 			trilinear_interpolate(p + vec3(0, 0.01, 0)), trilinear_interpolate(p + vec3(0, 0, 0.01)));
-	// 		vec3 N = normalize(sample2-sample1);
-	// 		vec3 L = normalize(vec3(255,0,200)-vray_dir);
-	// 		vec3 V = normalize(transformed_eye-vray_dir);
-	// 		color.rgb += shading(N, V, L);
-	// 		break;
-	// 	}
-	// }
-
-	// FAST AND ACCURATE INTERSECTIOn
-	for (float t = t_hit.x; t < t_hit.y; t += dt) {
-		vec4 poly = polynomial(p, ray_dir);
-		p += ray_dir * dt;
-		float t0 = t;
-		float t1 = t+dt;
-		float f0 = func(poly, t);
-		float f1 = func(poly, t+dt);
-		//solve quadratic for extrema
+	vec3 fitted_origin = vec3(origin.x*(volumeDims.x-1), origin.y*(volumeDims.y-1), origin.z*(volumeDims.z-1));
+	ivec3 steps = ivec3(sign(ray_dir.x), sign(ray_dir.y), sign(ray_dir.z));
+	ivec3 current_voxel = ivec3(fitted_origin.x + -0.5*(steps.x-1), fitted_origin.y + -0.5*(steps.y-1), fitted_origin.z + -0.5*(steps.z-1));
+	vec3 tMax = vec3(
+		((current_voxel.x + steps.x) - fitted_origin.x)/ray_dir.x,
+		((current_voxel.y + steps.y) - fitted_origin.y)/ray_dir.y,
+		((current_voxel.z + steps.z) - fitted_origin.z)/ray_dir.z
+	);
+	vec3 tDelta = vec3(
+		1/ray_dir.x,
+		1/ray_dir.y,
+		1/ray_dir.z
+	);
+	float tIn = 0;
+	float tOut = 0;
+	float t0;
+	float t1;
+	float f0;
+	float f1;
+	vec4 poly;
+	//traverse through intersecting voxels
+	do {
+		if (tMax.x < tMax.y) {
+			if (tMax.x < tMax.z) {
+				current_voxel.x += steps.x;
+				current_voxel.x = min(current_voxel.x, volumeDims.x-1);
+				current_voxel.x = max(current_voxel.x, 0);
+				tOut = tMax.x;
+				tMax.x += tDelta.x;
+			} else {
+				current_voxel.z += steps.z;
+				current_voxel.z = min(current_voxel.z, volumeDims.z-1);
+				current_voxel.z = max(current_voxel.z, 0);
+				tOut = tMax.z;
+				tMax.z += tDelta.z;
+			}
+		} else {
+			if (tMax.y < tMax.z) {
+				current_voxel.y += steps.y;
+				current_voxel.y = min(current_voxel.y, volumeDims.y-1);
+				current_voxel.y = max(current_voxel.y, 0);
+				tOut = tMax.y;
+				tMax.y += tDelta.y;
+			} else {
+				current_voxel.z += steps.z;
+				current_voxel.z = min(current_voxel.z, volumeDims.z-1);
+				current_voxel.z = max(current_voxel.z, 0);
+				tOut = tMax.z;
+				tMax.z += tDelta.z;
+			}
+		} 
+		poly = polynomial(fitted_origin, ray_dir, steps, current_voxel);
+		t0 = tIn;
+		t1 = tOut;
+		f0 = func(poly, t0);
+		f1 = func(poly, t1);
+				//solve quadratic for extrema
 		float D = (2*poly.y) * (2*poly.y) - 4 * (3*poly.x) * poly.z; // calculate discriminant squared
 		if (D > 0) {
 			D = sqrt(D);
@@ -197,6 +208,69 @@ void main(void) {
 			color = vec4(1);
 			break;
 		}
-	}
+		tIn = tOut;
+	} while (0 < min(current_voxel.x, min(current_voxel.y, current_voxel.z)) && (volumeDims.x - 1) > current_voxel.x && (volumeDims.y - 1) > current_voxel.y && (volumeDims.z - 1) > current_voxel.z);
+
+	// SIMPLE LINEAR INTERPOLATION
+	// for (float t = t_hit.x; t < t_hit.y; t += dt) {
+	// 	// Step 4.1: Sample the volume, and color it by the transfer function.
+	// 	// Note that here we don't use the opacity from the transfer function,
+	// 	// and just use the sample value as the opacity
+	// 	float val_in = trilinear_interpolate(p);
+	// 	p += ray_dir * dt;
+	// 	float val_out = trilinear_interpolate(p);
+	// 	if (sign(val_in - isovalue) != sign(val_out - isovalue)){
+	// 		color = vec4(0, 1, 0.5, 1);
+	// 		p = (p - ray_dir * dt) + (ray_dir * dt) * ((isovalue - val_in)/(val_out - val_in));
+	// 		vec3 sample1 = vec3(trilinear_interpolate(p - vec3(0.01, 0, 0)), 
+	// 			trilinear_interpolate(p - vec3(0, 0.01, 0)), trilinear_interpolate(p - vec3(0, 0, 0.01)));
+	// 		vec3 sample2 = vec3(trilinear_interpolate(p + vec3(0.01, 0, 0)), 
+	// 			trilinear_interpolate(p + vec3(0, 0.01, 0)), trilinear_interpolate(p + vec3(0, 0, 0.01)));
+	// 		vec3 N = normalize(sample2-sample1);
+	// 		vec3 L = normalize(vec3(255,0,200)-vray_dir);
+	// 		vec3 V = normalize(transformed_eye-vray_dir);
+	// 		color.rgb += shading(N, V, L);
+	// 		break;
+	// 	}
+	// }
+
+	// FAST AND ACCURATE INTERSECTIOn
+	// for (float t = t_hit.x; t < t_hit.y; t += dt) {
+	// 	vec4 poly = polynomial(p, ray_dir);
+	// 	p += ray_dir * dt;
+	// 	float t0 = t;
+	// 	float t1 = t+dt;
+	// 	float f0 = func(poly, t);
+	// 	float f1 = func(poly, t+dt);
+	// 	//solve quadratic for extrema
+	// 	float D = (2*poly.y) * (2*poly.y) - 4 * (3*poly.x) * poly.z; // calculate discriminant squared
+	// 	if (D > 0) {
+	// 		D = sqrt(D);
+	// 		vec2 roots = vec2((-(2*poly.y) - D) / (2 * (3*poly.x)), (-(2*poly.y) + D) / (2 * (3*poly.x))); //return roots
+	// 		float e0 = min(roots.x, roots.y);
+	// 		if (e0 < t1 && e0 > t0) {
+	// 			if (sign(func(poly, e0)) == sign(f0)) {
+	// 				t0 = e0;
+	// 				f0 = func(poly, e0);
+	// 			} else {
+	// 				t1 = e0;
+	// 				f1 = func(poly, e0);
+	// 			}
+	// 		}
+	// 		float e1 = max(roots.x, roots.y);
+	// 		if (e1 < t1 && e1 > t0) {
+	// 			if (sign(func(poly, e1)) == sign(f0)) {
+	// 				t0 = e1;
+	// 				f0 = func(poly, e1);
+	// 			} else {
+	// 				t1 = e1;
+	// 				f1 = func(poly, e1);
+	// 			}
+	// 		}
+	// 	} if (sign(f0) != sign(f1)) {
+	// 		color = vec4(1);
+	// 		break;
+	// 	}
+	// }
 }
 
