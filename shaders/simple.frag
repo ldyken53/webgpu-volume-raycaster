@@ -141,6 +141,12 @@ void main() {
     // Note: each voxel is a 1^3 box on the grid
     const vec3 t_delta = abs(inv_grid_ray_dir);
 
+    /* Note: For isosurface rendering we want to be traversing the dual grid,
+     * where values are at the cell vertices. This traverses the cell-centered
+     * grid where values are at cell centers. Switching to the dual grid just
+     * is an additional -0.5 offset in voxel space (shifting by 0.5 grid cells down)
+     */
+
     color = vec4(0);
     // Traverse the grid 
     while (!outside_grid(p) && color.a < 0.95) {
