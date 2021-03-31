@@ -31,9 +31,9 @@ vec2 intersect_box(vec3 orig, vec3 dir) {
 }
 
 float trilinear_interpolate(vec3 fitted_p) {
-	ivec3 p1 = ivec3(fitted_p);
+	ivec3 p1 = clamp(ivec3(fitted_p), ivec3(0), ivec3(volumeDims - 1));
 	// Need to apply minimum so function doesn't try to interpolate when on x, y, or z edges
-	ivec3 p2 = ivec3(min(volumeDims.x-1, p1.x+1), min(volumeDims.x-1, p1.y+1), min(volumeDims.x-1, p1.z+1));
+    ivec3 p2 = clamp(p1 + 1, ivec3(0), ivec3(volumeDims - 1));
 	// Keep track of the decimal portions 
 	vec3 differences = fitted_p - p1;
 	// Interpolate across x, then y, then z, and return the value normalized between 0 and 1
@@ -108,7 +108,106 @@ float func(vec4 poly, float t) {
 	return (poly.x*pow(t,3)+poly.y*pow(t,2)+poly.z*t+poly.w);
 }
 
-void main(void) {
+bool outside_grid(const vec3 p) {
+    return any(lessThan(p, vec3(0))) || any(greaterThanEqual(p, vec3(volumeDims)));
+}
+
+void main() {
+    vec3 ray_dir = normalize(vray_dir);
+
+    // Step 2: Intersect the ray with the volume bounds to find the interval
+	// along the ray overlapped by the volume.
+	vec2 t_hit = intersect_box(transformed_eye, ray_dir);
+	if (t_hit.x > t_hit.y) {
+		discard;
+	}
+	// We don't want to sample voxels behind the eye if it's
+	// inside the volume, so keep the starting point at or in front
+	// of the eye
+	t_hit.x = max(t_hit.x, 0.0);
+
+    // Setup for DDA traversal
+	vec3 p = (transformed_eye + t_hit.x * ray_dir) * volumeDims;
+    p = clamp(p, vec3(0), vec3(volumeDims - 1));
+	vec3 origin = p;
+    const vec3 grid_ray_dir = normalize(ray_dir * volumeDims);
+    const vec3 inv_grid_ray_dir = 1.0 / grid_ray_dir;
+    const vec3 start_cell = floor(p);
+    const vec3 t_max_neg = (start_cell - p) * inv_grid_ray_dir;
+    const vec3 t_max_pos = (start_cell + vec3(1) - p) * inv_grid_ray_dir;
+    const bvec3 is_neg_dir = lessThan(grid_ray_dir, vec3(0));
+    // Pick between positive/negative t_max based on the ray sign
+    vec3 t_max = mix(t_max_pos, t_max_neg, is_neg_dir);
+    const ivec3 grid_step = ivec3(sign(grid_ray_dir));
+    // Note: each voxel is a 1^3 box on the grid
+    const vec3 t_delta = abs(inv_grid_ray_dir);
+
+	float t0 = 0;
+	float t1;
+	float f0;
+	float f1;
+	vec4 poly;
+    /* Note: For isosurface rendering we want to be traversing the dual grid,
+     * where values are at the cell vertices. This traverses the cell-centered
+     * grid where values are at cell centers. Switching to the dual grid just
+     * is an additional -0.5 offset in voxel space (shifting by 0.5 grid cells down)
+     */
+
+    color = vec4(0);
+    // Traverse the grid 
+    while (!outside_grid(p) && color.a < 0.95) {
+        const ivec3 cell = ivec3(p);
+
+        // Advance in the grid
+        float t_next = min(t_max.x, min(t_max.y, t_max.z));
+        if (t_next == t_max.x) {
+            p.x += grid_step.x;
+            t_max.x += t_delta.x;
+        } else if (t_next == t_max.y) {
+            p.y += grid_step.y;
+            t_max.y += t_delta.y;
+        } else {
+            p.z += grid_step.z;
+            t_max.z += t_delta.z;
+        }
+		poly = polynomial(origin, grid_ray_dir, grid_step, cell);
+		t1 = t_next;
+		f0 = func(poly, t0);
+		f1 = func(poly, t1);
+		//solve quadratic for extrema
+		float D = (2*poly.y) * (2*poly.y) - 4 * (3*poly.x) * poly.z; // calculate discriminant squared
+		if (D > 0) {
+			D = sqrt(D);
+			vec2 roots = vec2((-(2*poly.y) - D) / (2 * (3*poly.x)), (-(2*poly.y) + D) / (2 * (3*poly.x))); //return roots
+			float e0 = min(roots.x, roots.y);
+			if (e0 < t1 && e0 > t0) {
+				if (sign(func(poly, e0)) == sign(f0)) {
+					t0 = e0;
+					f0 = func(poly, e0);
+				} else {
+					t1 = e0;
+					f1 = func(poly, e0);
+				}
+			}
+			float e1 = max(roots.x, roots.y);
+			if (e1 < t1 && e1 > t0) {
+				if (sign(func(poly, e1)) == sign(f0)) {
+					t0 = e1;
+					f0 = func(poly, e1);
+				} else {
+					t1 = e1;
+					f1 = func(poly, e1);
+				}
+			}
+		} if (sign(f0) != sign(f1)) {
+			color = vec4(1);
+			break;
+		}
+		t0 = t_next;
+    }
+}
+
+void old_main(void) {
     vec3 ray_dir = normalize(vray_dir);
 
     // Intersect the ray with the volume bounds to find the interval
