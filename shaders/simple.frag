@@ -18,8 +18,10 @@ layout(set = 0, binding = 6) uniform Isovalue {
 layout(location = 0) out vec4 color;
 
 vec2 intersect_box(vec3 orig, vec3 dir) {
-    const vec3 box_min = vec3(0);
-    const vec3 box_max = vec3(1);
+    const vec3 box_min = ivec3(0);
+    const vec3 box_max = volumeDims - vec3(1);
+	dir = dir * volumeDims - vec3(0.5);
+	orig = orig * volumeDims - vec3(0.5);
     vec3 inv_dir = 1.0 / dir;
     vec3 tmin_tmp = (box_min - orig) * inv_dir;
     vec3 tmax_tmp = (box_max - orig) * inv_dir;
@@ -127,8 +129,8 @@ void main() {
 	t_hit.x = max(t_hit.x, 0.0);
 
     // Setup for DDA traversal
-	vec3 p = (transformed_eye + t_hit.x * ray_dir) * volumeDims;
-    p = clamp(p, vec3(0), vec3(volumeDims - 1));
+	vec3 p = (transformed_eye + t_hit.x * ray_dir) * volumeDims - vec3(0.5);
+    p = clamp(p, vec3(0.0001), vec3(volumeDims - 1.0001));
 	vec3 origin = p;
     const vec3 grid_ray_dir = normalize(ray_dir * volumeDims);
     const vec3 inv_grid_ray_dir = 1.0 / grid_ray_dir;
@@ -160,6 +162,7 @@ void main() {
 
         // Advance in the grid
         float t_next = min(t_max.x, min(t_max.y, t_max.z));
+
         if (t_next == t_max.x) {
             p.x += grid_step.x;
             t_max.x += t_delta.x;
