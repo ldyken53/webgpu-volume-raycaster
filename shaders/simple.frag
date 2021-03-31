@@ -47,16 +47,16 @@ float trilinear_interpolate(vec3 fitted_p) {
 	return c / 255.0;
 }
 
-vec4 polynomial(vec3 fitted_origin, vec3 b0, ivec3 steps, ivec3 current_voxel) {
-	ivec3 current_voxel1 = current_voxel + steps;
+vec4 polynomial(vec3 fitted_origin, vec3 b0, ivec3 current_voxel) {
+	ivec3 current_voxel1 = current_voxel + 1;
 	// Keep track of the decimal portions 
 	const vec3 a[2] = vec3[2](
-		(current_voxel - fitted_origin)/(current_voxel1 - current_voxel),
-		(fitted_origin - current_voxel)/(current_voxel1 - current_voxel)
+		(current_voxel - fitted_origin),
+		(fitted_origin - current_voxel)
 	);
 	const vec3 b[2] = vec3[2](
-		b0/(current_voxel1 - current_voxel),
-		(-1 * b0)/(current_voxel1 - current_voxel)
+		b0,
+		(-1 * b0)
 	);
 	const ivec3 p[2] = ivec3[2](
 		current_voxel,
@@ -142,8 +142,8 @@ void main() {
     // Note: each voxel is a 1^3 box on the grid
     const vec3 t_delta = abs(inv_grid_ray_dir);
 
-	float t0 = 0;
-	float t1;
+	float t0 = t_hit.x;
+	float t1 = t_hit.x;
 	float f0;
 	float f1;
 	vec4 poly;
@@ -170,40 +170,45 @@ void main() {
             p.z += grid_step.z;
             t_max.z += t_delta.z;
         }
-		poly = polynomial(origin, grid_ray_dir, grid_step, cell);
+		poly = polynomial(origin, grid_ray_dir, cell);
 		t1 = t_next;
 		f0 = func(poly, t0);
 		f1 = func(poly, t1);
-		//solve quadratic for extrema
-		float D = (2*poly.y) * (2*poly.y) - 4 * (3*poly.x) * poly.z; // calculate discriminant squared
-		if (D > 0) {
-			D = sqrt(D);
-			vec2 roots = vec2((-(2*poly.y) - D) / (2 * (3*poly.x)), (-(2*poly.y) + D) / (2 * (3*poly.x))); //return roots
-			float e0 = min(roots.x, roots.y);
-			if (e0 < t1 && e0 > t0) {
-				if (sign(func(poly, e0)) == sign(f0)) {
-					t0 = e0;
-					f0 = func(poly, e0);
-				} else {
-					t1 = e0;
-					f1 = func(poly, e0);
-				}
-			}
-			float e1 = max(roots.x, roots.y);
-			if (e1 < t1 && e1 > t0) {
-				if (sign(func(poly, e1)) == sign(f0)) {
-					t0 = e1;
-					f0 = func(poly, e1);
-				} else {
-					t1 = e1;
-					f1 = func(poly, e1);
-				}
-			}
-		} if (sign(f0) != sign(f1)) {
+		if (sign(f0) != sign(f1)) {
 			color = vec4(1);
 			break;
 		}
 		t0 = t_next;
+		// //solve quadratic for extrema
+		// float D = (2*poly.y) * (2*poly.y) - 4 * (3*poly.x) * poly.z; // calculate discriminant squared
+		// if (D > 0) {
+		// 	D = sqrt(D);
+		// 	vec2 roots = vec2((-(2*poly.y) - D) / (2 * (3*poly.x)), (-(2*poly.y) + D) / (2 * (3*poly.x))); //return roots
+		// 	float e0 = min(roots.x, roots.y);
+		// 	if (e0 < t1 && e0 > t0) {
+		// 		if (sign(func(poly, e0)) == sign(f0)) {
+		// 			t0 = e0;
+		// 			f0 = func(poly, e0);
+		// 		} else {
+		// 			t1 = e0;
+		// 			f1 = func(poly, e0);
+		// 		}
+		// 	}
+		// 	float e1 = max(roots.x, roots.y);
+		// 	if (e1 < t1 && e1 > t0) {
+		// 		if (sign(func(poly, e1)) == sign(f0)) {
+		// 			t0 = e1;
+		// 			f0 = func(poly, e1);
+		// 		} else {
+		// 			t1 = e1;
+		// 			f1 = func(poly, e1);
+		// 		}
+		// 	}
+		// } if (sign(f0) != sign(f1)) {
+		// 	color = vec4(1);
+		// 	break;
+		// }
+		// t0 = t_next;
     }
 }
 
@@ -273,7 +278,7 @@ void old_main(void) {
 				tMax.z += tDelta.z;
 			}
 		} 
-		poly = polynomial(fitted_origin, ray_dir, steps, current_voxel);
+		poly = polynomial(fitted_origin, ray_dir, current_voxel);
 		t0 = tIn;
 		t1 = tOut;
 		f0 = func(poly, t0);
