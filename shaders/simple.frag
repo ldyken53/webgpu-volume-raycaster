@@ -17,9 +17,7 @@ layout(set = 0, binding = 6) uniform Isovalue {
 
 layout(location = 0) out vec4 color;
 
-vec2 intersect_box(vec3 orig, vec3 dir) {
-    const vec3 box_min = vec3(0);
-    const vec3 box_max = vec3(1);
+vec2 intersect_box(vec3 orig, vec3 dir, const vec3 box_min, const vec3 box_max) {
     vec3 inv_dir = 1.0 / dir;
     vec3 tmin_tmp = (box_min - orig) * inv_dir;
     vec3 tmax_tmp = (box_max - orig) * inv_dir;
@@ -112,12 +110,53 @@ bool outside_grid(const vec3 p) {
     return any(lessThan(p, vec3(0))) || any(greaterThanEqual(p, vec3(volumeDims)));
 }
 
+bool outside_dual_grid(const vec3 p) {
+    return any(lessThan(p, vec3(0))) || any(greaterThanEqual(p, vec3(volumeDims - 1)));
+}
+
+const ivec3 index_to_vertex[8] = ivec3[8](
+    ivec3(0, 0, 0),
+    ivec3(1, 0, 0),
+    ivec3(1, 1, 0),
+    ivec3(0, 1, 0),
+    ivec3(0, 0, 1),
+    ivec3(1, 0, 1),
+    ivec3(1, 1, 1),
+    ivec3(0, 1, 1) 
+);
+// Load the vertex values for the dual cell's vertices with its bottom-near-left corner
+// at v000. Vertex values will be returned in the order:
+// [v000, v100, v110, v010, v001, v101, v111, v011]
+void load_vertex_values(const ivec3 v000, out float values[8]) {
+    for (int i = 0; i < 8; ++i) { 
+        ivec3 v = v000 + index_to_vertex[i];
+        values[i] = volumeData.data[v.x + volumeDims.x * (v.y + v.z * volumeDims.y)] / 255.0;
+    }
+}
+
+// Trilinear interpolation at the given point within the cell with its origin at v000
+// (origin = bottom-left-near point)
+float trilinear_interpolate_in_cell(vec3 p, ivec3 v000, in float vertex_values[8]) {
+    const vec3 diff = p - v000;
+	// Interpolate across x, then y, then z, and return the value normalized between 0 and 1
+    // WILL NOTE: renamed t0 c00/c11 to match wikipedia notation
+	const float c00 = vertex_values[0] * (1.f - diff.x) + vertex_values[1] * diff.x;
+	const float c01 = vertex_values[4] * (1.f - diff.x) + vertex_values[5] * diff.x;
+    const float c10 = vertex_values[3] * (1.f - diff.x) + vertex_values[2] * diff.x;
+    const float c11 = vertex_values[7] * (1.f - diff.x) + vertex_values[6] * diff.x;
+	const float c0 = c00 * (1.f - diff.y) + c10 * diff.y;
+	const float c1 = c01 * (1.f - diff.y) + c11 * diff.y;
+	return c0 * (1.f - diff.z) + c1 * diff.z;
+}
+
 void main() {
     vec3 ray_dir = normalize(vray_dir);
 
-    // Step 2: Intersect the ray with the volume bounds to find the interval
-	// along the ray overlapped by the volume.
-	vec2 t_hit = intersect_box(transformed_eye, ray_dir);
+    // Transform the ray into the dual grid space and intersect with the dual grid bounds
+	const vec3 vol_eye = transformed_eye * volumeDims - vec3(0.5);
+    const vec3 grid_ray_dir = normalize(ray_dir * volumeDims);
+
+	vec2 t_hit = intersect_box(vol_eye, grid_ray_dir, vec3(0), volumeDims - 1);
 	if (t_hit.x > t_hit.y) {
 		discard;
 	}
@@ -126,14 +165,12 @@ void main() {
 	// of the eye
 	t_hit.x = max(t_hit.x, 0.0);
 
-    // Setup for DDA traversal
-	vec3 p = (transformed_eye + t_hit.x * ray_dir) * volumeDims;
-    p = clamp(p, vec3(0), vec3(volumeDims - 1));
-    const vec3 grid_ray_dir = normalize(ray_dir * volumeDims);
+	vec3 p = (vol_eye + t_hit.x * grid_ray_dir);
+    p = clamp(p, vec3(0), vec3(volumeDims - 2));
     const vec3 inv_grid_ray_dir = 1.0 / grid_ray_dir;
     const vec3 start_cell = floor(p);
-    const vec3 t_max_neg = (start_cell - p) * inv_grid_ray_dir;
-    const vec3 t_max_pos = (start_cell + vec3(1) - p) * inv_grid_ray_dir;
+    const vec3 t_max_neg = (start_cell - vol_eye) * inv_grid_ray_dir;
+    const vec3 t_max_pos = (start_cell + vec3(1) - vol_eye) * inv_grid_ray_dir;
     const bvec3 is_neg_dir = lessThan(grid_ray_dir, vec3(0));
     // Pick between positive/negative t_max based on the ray sign
     vec3 t_max = mix(t_max_pos, t_max_neg, is_neg_dir);
@@ -147,18 +184,41 @@ void main() {
      * is an additional -0.5 offset in voxel space (shifting by 0.5 grid cells down)
      */
 
+    float prev_vol_t = t_hit.x;
+    float t_prev = t_hit.x;
+    float vertex_values[8];
     color = vec4(0);
     // Traverse the grid 
-    while (!outside_grid(p) && color.a < 0.95) {
-        const ivec3 cell = ivec3(p);
-        // No interpolation, just traversal the cell-centered data grid
-        float val = volumeData.data[cell.x + volumeDims.x * (cell.y + cell.z * volumeDims.y)] / 255.0;
-        vec4 val_color = vec4(textureLod(sampler2D(colormap, mySampler), vec2(val, 0.5), 0.f).rgb, val * 0.5);
+    while (!outside_dual_grid(p) && color.a <= 0.95) {
+        const ivec3 v000 = ivec3(p);
+        load_vertex_values(v000, vertex_values);
+
+        // Simple rule of signs isosurface within the cell. First compute
+        // the field value at the ray's enter and exit points
+        const float t_next = min(t_max.x, min(t_max.y, t_max.z));
+
+        const vec3 p_enter = vol_eye + grid_ray_dir * t_prev;
+        const float f_enter = trilinear_interpolate_in_cell(p_enter, v000, vertex_values);
+
+        const vec3 p_exit = vol_eye + grid_ray_dir * t_next;
+        const float f_exit = trilinear_interpolate_in_cell(p_exit, v000, vertex_values);
+
+        vec4 val_color = vec4(0);
+        // Combined volume + isosurface rendering
+        if (sign(f_enter - isovalue) != sign(f_exit - isovalue)) {
+            val_color = vec4(1);
+        } else {
+            float val = (f_enter + f_exit) * 0.5f;
+            val_color = vec4(textureLod(sampler2D(colormap, mySampler), vec2(val, 0.5), 0.f).rgb, val * 0.5);
+            // Opacity correction applied to the val_color.a to account for
+            // variable interval of ray overlap with each cell
+            val_color.a = clamp(1.f - pow(1.f - val_color.a, t_next - t_prev), 0.f, 1.f);
+        }
         color.rgb += (1.0 - color.a) * val_color.a * val_color.rgb;
         color.a += (1.0 - color.a) * val_color.a;
 
+        t_prev = t_next;
         // Advance in the grid
-        float t_next = min(t_max.x, min(t_max.y, t_max.z));
         if (t_next == t_max.x) {
             p.x += grid_step.x;
             t_max.x += t_delta.x;
@@ -177,7 +237,7 @@ void old_main(void) {
 
     // Intersect the ray with the volume bounds to find the interval
 	// along the ray overlapped by the volume.
-	vec2 t_hit = intersect_box(transformed_eye, ray_dir);
+	vec2 t_hit = intersect_box(transformed_eye, ray_dir, vec3(0), vec3(1));
 	if (t_hit.x > t_hit.y) {
 		discard;
 	}
