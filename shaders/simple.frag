@@ -139,18 +139,23 @@ void load_vertex_values(const ivec3 v000, out float values[8]) {
 
 // Trilinear interpolation at the given point within the cell with its origin at v000
 // (origin = bottom-left-near point)
-float trilinear_interpolate_in_cell(const vec3 p, const ivec3 v000, in float vertex_values[8]) {
+float trilinear_interpolate_in_cell(const vec3 p, const ivec3 v000, in float values[8]) {
     const vec3 diff = p - v000;
 	// Interpolate across x, then y, then z, and return the value normalized between 0 and 1
-    // WILL NOTE: renamed t0 c00/c11 to match wikipedia notation
-	const float c00 = vertex_values[0] * (1.f - diff.x) + vertex_values[1] * diff.x;
-	const float c01 = vertex_values[4] * (1.f - diff.x) + vertex_values[5] * diff.x;
-    const float c10 = vertex_values[2] * (1.f - diff.x) + vertex_values[3] * diff.x;
-    const float c11 = vertex_values[6] * (1.f - diff.x) + vertex_values[7] * diff.x;
+    // WILL note: renamed t0 c00/c11 to match wikipedia notation
+	const float c00 = values[0] * (1.f - diff.x) + values[1] * diff.x;
+	const float c01 = values[4] * (1.f - diff.x) + values[5] * diff.x;
+    const float c10 = values[2] * (1.f - diff.x) + values[3] * diff.x;
+    const float c11 = values[6] * (1.f - diff.x) + values[7] * diff.x;
 	const float c0 = c00 * (1.f - diff.y) + c10 * diff.y;
 	const float c1 = c01 * (1.f - diff.y) + c11 * diff.y;
 	return c0 * (1.f - diff.z) + c1 * diff.z;
 }
+
+#define USE_POLYNOMIAL 1
+#define LOCAL_RAY_FOR_POLYNOMIAL 1
+#define MARMITT 1
+#define SHOW_VOLUME 0
 
 // Compute the polynomial for the cell with the given vertex values
 vec4 compute_polynomial(const vec3 p, const vec3 dir, const vec3 v000, in float values[8]) {
@@ -159,8 +164,7 @@ vec4 compute_polynomial(const vec3 p, const vec3 dir, const vec3 v000, in float 
     const vec3 a[2] = {v111 - p, p - v000};
     const vec3 b[2] = {dir, -dir};
 
-    // TODO: for marmitt, w = -isovalue init
-    vec4 poly = vec4(0, 0, 0, 0);//, -isovalue);
+    vec4 poly = vec4(0);
     for (int k = 0; k < 2; ++k) {
         for (int j = 0; j < 2; ++j) {
             for (int i = 0; i < 2; ++i) {
@@ -180,12 +184,30 @@ vec4 compute_polynomial(const vec3 p, const vec3 dir, const vec3 v000, in float 
             }
         }
     }
+#if MARMITT
+    // TODO: not compatible with showing the volume via the polynomial
+    //poly.w -= isovalue;
+#endif
+
 	return poly;
 }
 
-#define USE_POLYNOMIAL 1
-#define LOCAL_RAY_FOR_POLYNOMIAL 1
-#define SHOW_VOLUME 1
+float evaluate_polynomial(const vec4 poly, const float t) {
+    return poly.x * pow(t, 3.f) + poly.y * pow(t, 2.f) + poly.z * t + poly.w;
+}
+
+// Returns true if the quadratic has real roots
+bool solve_quadratic(const vec3 poly, out float roots[2]) {
+    float discriminant = pow(poly.y, 2.f) - 4.f * poly.x * poly.z;
+    if (discriminant < 0.f) {
+        return false;
+    }
+    discriminant = sqrt(discriminant);
+    vec2 r = 0.5f * vec2(-poly.y + discriminant, -poly.y - discriminant) / poly.x;
+    roots[0] = min(r.x, r.y);
+    roots[1] = max(r.x, r.y);
+    return true;
+}
 
 void main() {
     vec3 ray_dir = normalize(vray_dir);
@@ -227,7 +249,7 @@ void main() {
     float vertex_values[8];
     color = vec4(0);
     // Traverse the grid 
-    while (!outside_dual_grid(p) && color.a <= 0.95) {
+    while (!outside_dual_grid(p) && color.a <= 0.99) {
         const ivec3 v000 = ivec3(p);
         load_vertex_values(v000, vertex_values);
 
@@ -243,39 +265,75 @@ void main() {
         // ray's overlap with the cell, which makes it easy to compute t_in/t_out and
         // avoid numerical issues with cell_p being right at the edge of the cell.
         const vec3 cell_p = vol_eye + grid_ray_dir * (t_prev + (t_next - t_prev) * 0.5f);
-        const float t_in = -(t_next - t_prev) * 0.5f; 
-        const float t_out = (t_next - t_prev) * 0.5f; 
+        float t_in = -(t_next - t_prev) * 0.5f; 
+        float t_out = (t_next - t_prev) * 0.5f; 
         const vec4 poly = compute_polynomial(cell_p, grid_ray_dir, v000, vertex_values);
 #else
-        const float t_in = t_prev;
-        const float t_out = t_next;
+        float t_in = t_prev;
+        float t_out = t_next;
         const vec4 poly = compute_polynomial(vol_eye, grid_ray_dir, v000, vertex_values);
 #endif
 
-        const float f_enter = poly.x * pow(t_in, 3.f) + poly.y * pow(t_in, 2.f) + poly.z * t_in + poly.w;
-        const float f_exit = poly.x * pow(t_out, 3.f) + poly.y * pow(t_out, 2.f) + poly.z * t_out + poly.w;
+        float f_in = evaluate_polynomial(poly, t_in);
+        float f_out = evaluate_polynomial(poly, t_out);
 
 #else
         // Non-polynomial mode, just do trilinear interpolation
         const vec3 p_enter = vol_eye + grid_ray_dir * t_prev;
-        const float f_enter = trilinear_interpolate_in_cell(p_enter, v000, vertex_values);
+        float f_in = trilinear_interpolate_in_cell(p_enter, v000, vertex_values);
 
         const vec3 p_exit = vol_eye + grid_ray_dir * t_next;
-        const float f_exit = trilinear_interpolate_in_cell(p_exit, v000, vertex_values);
+        float f_out = trilinear_interpolate_in_cell(p_exit, v000, vertex_values);
 #endif
+
         vec4 val_color = vec4(0);
-        // Combined volume + isosurface rendering
-        if (sign(f_enter - isovalue) != sign(f_exit - isovalue)) {
+#if MARMITT
+        float roots[2] = {0, 0};
+        // TODO: Seeming to get some holes in the surface with the Marmitt intersector
+        if (solve_quadratic(vec3(3.f * poly.x, 2.f * poly.y, poly.z), roots)) {
+            if (roots[0] >= t_in && roots[0] <= t_out) {
+                float f_root0 = evaluate_polynomial(poly, roots[0]);
+                // Note: later would not need the isovalue here b/c it's in poly.w
+                if (sign(f_root0 - isovalue) == sign(f_in - isovalue)) {
+                    t_in = roots[0];
+                    f_in = f_root0;
+                } else {
+                    t_out = roots[0];
+                    f_out = f_root0;
+                }
+            }
+            if (roots[1] >= t_in && roots[1] <= t_out) {
+                float f_root1 = evaluate_polynomial(poly, roots[1]);
+                // Note: later would not need the isovalue here b/c it's in poly.w
+                if (sign(f_root1 - isovalue) == sign(f_in - isovalue)) {
+                    t_in = roots[1];
+                    f_in = f_root1;
+                } else {
+                    t_out = roots[1];
+                    f_out = f_root1;
+                }
+            }
+            // TODO Later: if sign's equal there's no hit, if the signs
+            // aren't equal, we need to do repeated lienar interpolation to find the t value
+            // Note: later would not need the isovalue here b/c it's in poly.w
+            if (sign(f_in - isovalue) != sign(f_out - isovalue)) {
+                val_color = vec4(1);
+            }
+        }
+#else
+        if (sign(f_in - isovalue) != sign(f_out - isovalue)) {
             val_color = vec4(1);
-        } else {
+        }
+#endif
 #if SHOW_VOLUME
-            float val = (f_enter + f_exit) * 0.5f;
+        else {
+            float val = (f_in + f_out) * 0.5f;
             val_color = vec4(textureLod(sampler2D(colormap, mySampler), vec2(val, 0.5), 0.f).rgb, val * 0.5);
             // Opacity correction applied to the val_color.a to account for
             // variable interval of ray overlap with each cell
             val_color.a = clamp(1.f - pow(1.f - val_color.a, t_next - t_prev), 0.f, 1.f);
-#endif
         }
+#endif
         color.rgb += (1.0 - color.a) * val_color.a * val_color.rgb;
         color.a += (1.0 - color.a) * val_color.a;
 
