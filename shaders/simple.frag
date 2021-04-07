@@ -45,6 +45,7 @@ float trilinear_interpolate(vec3 fitted_p) {
 	return c / 255.0;
 }
 
+/*
 vec4 polynomial(vec3 fitted_origin, vec3 b0, ivec3 steps, ivec3 current_voxel) {
 	ivec3 current_voxel1 = current_voxel + steps;
 	// Keep track of the decimal portions 
@@ -74,6 +75,7 @@ vec4 polynomial(vec3 fitted_origin, vec3 b0, ivec3 steps, ivec3 current_voxel) {
 	}
 	return poly;
 }
+*/
 
 vec3 shading(vec3 N, vec3 V, vec3 L) {
 	vec3 Kd = vec3(0.6);
@@ -114,16 +116,17 @@ bool outside_dual_grid(const vec3 p) {
     return any(lessThan(p, vec3(0))) || any(greaterThanEqual(p, vec3(volumeDims - 1)));
 }
 
-const ivec3 index_to_vertex[8] = ivec3[8](
-    ivec3(0, 0, 0),
-    ivec3(1, 0, 0),
-    ivec3(1, 1, 0),
-    ivec3(0, 1, 0),
-    ivec3(0, 0, 1),
-    ivec3(1, 0, 1),
-    ivec3(1, 1, 1),
-    ivec3(0, 1, 1) 
-);
+const ivec3 index_to_vertex[8] = {
+    ivec3(0, 0, 0), // v000 = 0
+    ivec3(1, 0, 0), // v100 = 1
+    ivec3(0, 1, 0), // v010 = 2
+    ivec3(1, 1, 0), // v110 = 3
+    ivec3(0, 0, 1), // v001 = 4
+    ivec3(1, 0, 1), // v101 = 5
+    ivec3(0, 1, 1), // v011 = 6
+    ivec3(1, 1, 1)  // v111 = 7
+};
+
 // Load the vertex values for the dual cell's vertices with its bottom-near-left corner
 // at v000. Vertex values will be returned in the order:
 // [v000, v100, v110, v010, v001, v101, v111, v011]
@@ -136,18 +139,53 @@ void load_vertex_values(const ivec3 v000, out float values[8]) {
 
 // Trilinear interpolation at the given point within the cell with its origin at v000
 // (origin = bottom-left-near point)
-float trilinear_interpolate_in_cell(vec3 p, ivec3 v000, in float vertex_values[8]) {
+float trilinear_interpolate_in_cell(const vec3 p, const ivec3 v000, in float vertex_values[8]) {
     const vec3 diff = p - v000;
 	// Interpolate across x, then y, then z, and return the value normalized between 0 and 1
     // WILL NOTE: renamed t0 c00/c11 to match wikipedia notation
 	const float c00 = vertex_values[0] * (1.f - diff.x) + vertex_values[1] * diff.x;
 	const float c01 = vertex_values[4] * (1.f - diff.x) + vertex_values[5] * diff.x;
-    const float c10 = vertex_values[3] * (1.f - diff.x) + vertex_values[2] * diff.x;
-    const float c11 = vertex_values[7] * (1.f - diff.x) + vertex_values[6] * diff.x;
+    const float c10 = vertex_values[2] * (1.f - diff.x) + vertex_values[3] * diff.x;
+    const float c11 = vertex_values[6] * (1.f - diff.x) + vertex_values[7] * diff.x;
 	const float c0 = c00 * (1.f - diff.y) + c10 * diff.y;
 	const float c1 = c01 * (1.f - diff.y) + c11 * diff.y;
 	return c0 * (1.f - diff.z) + c1 * diff.z;
 }
+
+// Compute the polynomial for the cell with the given vertex values
+vec4 compute_polynomial(const vec3 p, const vec3 dir, const vec3 v000, in float values[8]) {
+    const vec3 v111 = v000 + vec3(1);
+    // Note: Grid voxels sizes are 1^3
+    const vec3 a[2] = {v111 - p, p - v000};
+    const vec3 b[2] = {dir, -dir};
+
+    // TODO: for marmitt, w = -isovalue init
+    vec4 poly = vec4(0, 0, 0, 0);//, -isovalue);
+    for (int k = 0; k < 2; ++k) {
+        for (int j = 0; j < 2; ++j) {
+            for (int i = 0; i < 2; ++i) {
+                const float val = values[i + 2 * (j + 2 * k)];
+
+                poly.x += b[i].x * b[j].y * b[k].z * val;
+
+                poly.y += (a[i].x * b[j].y * b[k].z +
+                           b[i].x * a[j].y * b[k].z +
+                           b[i].x * b[j].y * a[k].z) * val;
+
+                poly.z += (b[i].x * a[j].y * a[k].z +
+                           a[i].x * b[j].y * a[k].z +
+                           a[i].x * a[j].y * b[k].z) * val;
+
+                poly.w += a[i].x * a[j].y * a[k].z * val;
+            }
+        }
+    }
+	return poly;
+}
+
+#define USE_POLYNOMIAL 1
+#define LOCAL_RAY_FOR_POLYNOMIAL 1
+#define SHOW_VOLUME 1
 
 void main() {
     vec3 ray_dir = normalize(vray_dir);
@@ -197,22 +235,46 @@ void main() {
         // the field value at the ray's enter and exit points
         const float t_next = min(t_max.x, min(t_max.y, t_max.z));
 
+#if USE_POLYNOMIAL
+#if LOCAL_RAY_FOR_POLYNOMIAL
+        // The text seems to not say explicitly, but I think it is required to have
+        // the ray "origin" within the cell for the cell-local coordinates for a to
+        // be computed properly. So here I set the cell_p to be at the midpoint of the
+        // ray's overlap with the cell, which makes it easy to compute t_in/t_out and
+        // avoid numerical issues with cell_p being right at the edge of the cell.
+        const vec3 cell_p = vol_eye + grid_ray_dir * (t_prev + (t_next - t_prev) * 0.5f);
+        const float t_in = -(t_next - t_prev) * 0.5f; 
+        const float t_out = (t_next - t_prev) * 0.5f; 
+        const vec4 poly = compute_polynomial(cell_p, grid_ray_dir, v000, vertex_values);
+#else
+        const float t_in = t_prev;
+        const float t_out = t_next;
+        const vec4 poly = compute_polynomial(vol_eye, grid_ray_dir, v000, vertex_values);
+#endif
+
+        const float f_enter = poly.x * pow(t_in, 3.f) + poly.y * pow(t_in, 2.f) + poly.z * t_in + poly.w;
+        const float f_exit = poly.x * pow(t_out, 3.f) + poly.y * pow(t_out, 2.f) + poly.z * t_out + poly.w;
+
+#else
+        // Non-polynomial mode, just do trilinear interpolation
         const vec3 p_enter = vol_eye + grid_ray_dir * t_prev;
         const float f_enter = trilinear_interpolate_in_cell(p_enter, v000, vertex_values);
 
         const vec3 p_exit = vol_eye + grid_ray_dir * t_next;
         const float f_exit = trilinear_interpolate_in_cell(p_exit, v000, vertex_values);
-
+#endif
         vec4 val_color = vec4(0);
         // Combined volume + isosurface rendering
         if (sign(f_enter - isovalue) != sign(f_exit - isovalue)) {
             val_color = vec4(1);
         } else {
+#if SHOW_VOLUME
             float val = (f_enter + f_exit) * 0.5f;
             val_color = vec4(textureLod(sampler2D(colormap, mySampler), vec2(val, 0.5), 0.f).rgb, val * 0.5);
             // Opacity correction applied to the val_color.a to account for
             // variable interval of ray overlap with each cell
             val_color.a = clamp(1.f - pow(1.f - val_color.a, t_next - t_prev), 0.f, 1.f);
+#endif
         }
         color.rgb += (1.0 - color.a) * val_color.a * val_color.rgb;
         color.a += (1.0 - color.a) * val_color.a;
@@ -232,6 +294,7 @@ void main() {
     }
 }
 
+#if 0
 void old_main(void) {
     vec3 ray_dir = normalize(vray_dir);
 
@@ -397,4 +460,5 @@ void old_main(void) {
 	// 	}
 	// }
 }
+#endif
 
