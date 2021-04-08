@@ -158,7 +158,7 @@ float trilinear_interpolate_in_cell(const vec3 p, const ivec3 v000, in float val
 
 #define USE_POLYNOMIAL 1
 #define LOCAL_RAY_FOR_POLYNOMIAL 1
-#define MARMITT 0
+#define MARMITT 1
 #define SHOW_VOLUME 0
 
 // Compute the polynomial for the cell with the given vertex values
@@ -169,6 +169,7 @@ vec4 compute_polynomial(const vec3 p, const vec3 dir, const vec3 v000, in float 
     const vec3 b[2] = {dir, -dir};
 
     vec4 poly = vec4(0);
+	poly.w -= isovalue;
     for (int k = 0; k < 2; ++k) {
         for (int j = 0; j < 2; ++j) {
             for (int i = 0; i < 2; ++i) {
@@ -188,10 +189,6 @@ vec4 compute_polynomial(const vec3 p, const vec3 dir, const vec3 v000, in float 
             }
         }
     }
-#if MARMITT
-    // TODO: not compatible with showing the volume via the polynomial
-    //poly.w -= isovalue;
-#endif
 
 	return poly;
 }
@@ -292,10 +289,10 @@ void main() {
 #else
             // Non-polynomial mode, just do trilinear interpolation
             const vec3 p_enter = vol_eye + grid_ray_dir * t_prev;
-            float f_in = trilinear_interpolate_in_cell(p_enter, v000, vertex_values);
+            float f_in = trilinear_interpolate_in_cell(p_enter, v000, vertex_values) - isovalue;
 
             const vec3 p_exit = vol_eye + grid_ray_dir * t_next;
-            float f_out = trilinear_interpolate_in_cell(p_exit, v000, vertex_values);
+            float f_out = trilinear_interpolate_in_cell(p_exit, v000, vertex_values) - isovalue;
 #endif
 
             vec4 val_color = vec4(0);
@@ -305,8 +302,7 @@ void main() {
             if (solve_quadratic(vec3(3.f * poly.x, 2.f * poly.y, poly.z), roots)) {
                 if (roots[0] >= t_in && roots[0] <= t_out) {
                     float f_root0 = evaluate_polynomial(poly, roots[0]);
-                    // Note: later would not need the isovalue here b/c it's in poly.w
-                    if (sign(f_root0 - isovalue) == sign(f_in - isovalue)) {
+                    if (sign(f_root0) == sign(f_in)) {
                         t_in = roots[0];
                         f_in = f_root0;
                     } else {
@@ -316,8 +312,7 @@ void main() {
                 }
                 if (roots[1] >= t_in && roots[1] <= t_out) {
                     float f_root1 = evaluate_polynomial(poly, roots[1]);
-                    // Note: later would not need the isovalue here b/c it's in poly.w
-                    if (sign(f_root1 - isovalue) == sign(f_in - isovalue)) {
+                    if (sign(f_root1) == sign(f_in)) {
                         t_in = roots[1];
                         f_in = f_root1;
                     } else {
@@ -326,16 +321,15 @@ void main() {
                     }
                 }
                 // TODO Later: if sign's equal there's no hit, if the signs
-                // aren't equal, we need to do repeated lienar interpolation to find the t value
-                // Note: later would not need the isovalue here b/c it's in poly.w
-                if (sign(f_in - isovalue) != sign(f_out - isovalue)) {
+                // aren't equal, we need to do repeated linear interpolation to find the t value
+                if (sign(f_in) != sign(f_out)) {
                     val_color = vec4(1);
                 }
 				/* Finding the root in t_in, t_out via repeated linear interpolation 
 				for (int i = 0; i < 2; i++) {
 					float t = t_in + (t_out - t_in) * (-1 * f_in) / (f_out - f_in);
 					float f_root = evaluate_polynomial(poly, t);
-					if (sign(f_root - isovalue) == sign(f_in - isovalue)) {
+					if (sign(f_root) == sign(f_in)) {
 						t_in = t;
 						f_in = f_root;
 					} else {
@@ -346,13 +340,14 @@ void main() {
 				float t_hit = t_in + (t_out - t_in) * (-1 * f_in) / (f_out - f_in); */
             }
 #else
-            if (sign(f_in - isovalue) != sign(f_out - isovalue)) {
+            if (sign(f_in) != sign(f_out)) {
                 val_color = vec4(1);
             }
 #endif
 #if SHOW_VOLUME
             else {
-                float val = (f_in + f_out) * 0.5f;
+				// Have to add two * isovalue because f_in, f_out have isovalue subtracted from them for isosurface extraction
+                float val = (f_in + f_out + 2 * isovalue) * 0.5f;
                 val_color = vec4(textureLod(sampler2D(colormap, mySampler), vec2(val, 0.5), 0.f).rgb, val * 0.5);
                 // Opacity correction applied to the val_color.a to account for
                 // variable interval of ray overlap with each cell
