@@ -50,12 +50,12 @@ vec4 polynomial(vec3 fitted_origin, vec3 b0, ivec3 steps, ivec3 current_voxel) {
 	ivec3 current_voxel1 = current_voxel + steps;
 	// Keep track of the decimal portions 
 	const vec3 a[2] = vec3[2](
-		(current_voxel - fitted_origin)/(current_voxel1 - current_voxel),
-		(fitted_origin - current_voxel)/(current_voxel1 - current_voxel)
+		(current_voxel - fitted_origin),
+		(fitted_origin - current_voxel)
 	);
 	const vec3 b[2] = vec3[2](
-		b0/(current_voxel1 - current_voxel),
-		(-1 * b0)/(current_voxel1 - current_voxel)
+		b0,
+		(-1 * b0)
 	);
 	const ivec3 p[2] = ivec3[2](
 		current_voxel,
@@ -432,7 +432,7 @@ void old_main(void) {
 				tMax.z += tDelta.z;
 			}
 		} 
-		poly = polynomial(fitted_origin, ray_dir, steps, current_voxel);
+		poly = polynomial(fitted_origin, ray_dir, current_voxel);
 		t0 = tIn;
 		t1 = tOut;
 		f0 = func(poly, t0);
