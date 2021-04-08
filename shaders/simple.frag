@@ -158,7 +158,7 @@ float trilinear_interpolate_in_cell(const vec3 p, const ivec3 v000, in float val
 
 #define USE_POLYNOMIAL 1
 #define LOCAL_RAY_FOR_POLYNOMIAL 1
-#define MARMITT 1
+#define MARMITT 0
 #define SHOW_VOLUME 0
 
 // Compute the polynomial for the cell with the given vertex values
@@ -331,6 +331,19 @@ void main() {
                 if (sign(f_in - isovalue) != sign(f_out - isovalue)) {
                     val_color = vec4(1);
                 }
+				/* Finding the root in t_in, t_out via repeated linear interpolation 
+				for (int i = 0; i < 2; i++) {
+					float t = t_in + (t_out - t_in) * (-1 * f_in) / (f_out - f_in);
+					float f_root = evaluate_polynomial(poly, t);
+					if (sign(f_root - isovalue) == sign(f_in - isovalue)) {
+						t_in = t;
+						f_in = f_root;
+					} else {
+						t_out = t;
+						f_out = f_root;
+					}
+				}
+				float t_hit = t_in + (t_out - t_in) * (-1 * f_in) / (f_out - f_in); */
             }
 #else
             if (sign(f_in - isovalue) != sign(f_out - isovalue)) {
