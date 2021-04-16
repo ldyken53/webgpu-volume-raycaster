@@ -199,6 +199,12 @@ float evaluate_polynomial(const vec4 poly, const float t) {
 
 // Returns true if the quadratic has real roots
 bool solve_quadratic(const vec3 poly, out float roots[2]) {
+	// Check for case when poly is just Bt + c = 0
+	if (poly.x == 0) {
+		roots[0] = -poly.z/poly.y;
+		roots[1] = -poly.z/poly.y;
+		return true;
+	}
     float discriminant = pow(poly.y, 2.f) - 4.f * poly.x * poly.z;
     if (discriminant < 0.f) {
         return false;
