@@ -157,7 +157,6 @@ float trilinear_interpolate_in_cell(const vec3 p, const ivec3 v000, in float val
 }
 
 #define USE_POLYNOMIAL 1
-#define LOCAL_RAY_FOR_POLYNOMIAL 1
 #define MARMITT 1
 #define SHOW_VOLUME 0
 
@@ -199,12 +198,12 @@ float evaluate_polynomial(const vec4 poly, const float t) {
 
 // Returns true if the quadratic has real roots
 bool solve_quadratic(const vec3 poly, out float roots[2]) {
-	// Check for case when poly is just Bt + c = 0
-	if (poly.x == 0) {
-		roots[0] = -poly.z/poly.y;
-		roots[1] = -poly.z/poly.y;
-		return true;
-	}
+    // Check for case when poly is just Bt + c = 0
+    if (poly.x == 0) {
+        roots[0] = -poly.z/poly.y;
+        roots[1] = -poly.z/poly.y;
+        return true;
+    }
     float discriminant = pow(poly.y, 2.f) - 4.f * poly.x * poly.z;
     if (discriminant < 0.f) {
         return false;
@@ -273,21 +272,15 @@ void main() {
 
         if (!skip_cell) {
 #if USE_POLYNOMIAL
-#if LOCAL_RAY_FOR_POLYNOMIAL
             // The text seems to not say explicitly, but I think it is required to have
             // the ray "origin" within the cell for the cell-local coordinates for a to
             // be computed properly. So here I set the cell_p to be at the midpoint of the
             // ray's overlap with the cell, which makes it easy to compute t_in/t_out and
             // avoid numerical issues with cell_p being right at the edge of the cell.
             const vec3 cell_p = vol_eye + grid_ray_dir * (t_prev + (t_next - t_prev) * 0.5f);
-            float t_in = -(t_next - t_prev) * 0.5f; 
-            float t_out = (t_next - t_prev) * 0.5f; 
+            float t_in = -(t_next - t_prev) * 0.5f;
+            float t_out = (t_next - t_prev) * 0.5f;
             const vec4 poly = compute_polynomial(cell_p, grid_ray_dir, v000, vertex_values);
-#else
-            float t_in = t_prev;
-            float t_out = t_next;
-            const vec4 poly = compute_polynomial(vol_eye, grid_ray_dir, v000, vertex_values);
-#endif
 
             float f_in = evaluate_polynomial(poly, t_in);
             float f_out = evaluate_polynomial(poly, t_out);
@@ -326,24 +319,31 @@ void main() {
                         f_out = f_root1;
                     }
                 }
-                // TODO Later: if sign's equal there's no hit, if the signs
-                // aren't equal, we need to do repeated linear interpolation to find the t value
-                if (sign(f_in) != sign(f_out)) {
-                    val_color = vec4(1);
+            }
+            // If the signs aren't equal we know there's an intersection in the cell
+            if (sign(f_in) != sign(f_out)) {
+                // Find the intersection via repeated linear interpolation
+                for (int i = 0; i < 2; i++) {
+                    float t = t_in + (t_out - t_in) * (-f_in) / (f_out - f_in);
+                    float f_t = evaluate_polynomial(poly, t);
+                    if (sign(f_t) == sign(f_in)) {
+                        t_in = t;
+                        f_in = f_t;
+                    } else {
+                        t_out = t;
+                        f_out = f_t;
+                    }
                 }
-				/* Finding the root in t_in, t_out via repeated linear interpolation 
-				for (int i = 0; i < 2; i++) {
-					float t = t_in + (t_out - t_in) * (-1 * f_in) / (f_out - f_in);
-					float f_root = evaluate_polynomial(poly, t);
-					if (sign(f_root) == sign(f_in)) {
-						t_in = t;
-						f_in = f_root;
-					} else {
-						t_out = t;
-						f_out = f_root;
-					}
-				}
-				float t_hit = t_in + (t_out - t_in) * (-1 * f_in) / (f_out - f_in); */
+                float t_hit = t_in + (t_out - t_in) * (-f_in) / (f_out - f_in);
+                // This t_hit value is relative to cell_p, so now find the depth
+                // along the original ray
+                vec3 hit_p = cell_p + grid_ray_dir * t_hit;
+                t_hit = length(hit_p - vol_eye);
+                // Apply some scaling factor so the depth values are within [0, 1]
+                // to be displayed as a color. Here I'm just dividing by the volume
+                // dimensions to scale it
+                val_color.xyz = vec3(t_hit) / length(volumeDims);
+                val_color.w = 1;
             }
 #else
             if (sign(f_in) != sign(f_out)) {
