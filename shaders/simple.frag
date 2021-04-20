@@ -159,6 +159,7 @@ float trilinear_interpolate_in_cell(const vec3 p, const ivec3 v000, in float val
 #define USE_POLYNOMIAL 1
 #define MARMITT 1
 #define SHOW_VOLUME 0
+#define GRADIENT_SHADING 0
 
 // Compute the polynomial for the cell with the given vertex values
 vec4 compute_polynomial(const vec3 p, const vec3 dir, const vec3 v000, in float values[8]) {
@@ -338,11 +339,25 @@ void main() {
                 // This t_hit value is relative to cell_p, so now find the depth
                 // along the original ray
                 vec3 hit_p = cell_p + grid_ray_dir * t_hit;
+#if GRADIENT_SHADING
+				vec3 sample1 = vec3(trilinear_interpolate_in_cell(hit_p-vec3(0.01, 0, 0), v000, vertex_values), 
+					trilinear_interpolate_in_cell(hit_p-vec3(0, 0.01, 0), v000, vertex_values),
+					trilinear_interpolate_in_cell(hit_p-vec3(0, 0, 0.01), v000, vertex_values));
+				vec3 sample2 = vec3(trilinear_interpolate_in_cell(hit_p+vec3(0.01, 0, 0), v000, vertex_values), 
+					trilinear_interpolate_in_cell(hit_p+vec3(0, 0.01, 0), v000, vertex_values),
+					trilinear_interpolate_in_cell(hit_p+vec3(0, 0, 0.01), v000, vertex_values));
+				vec3 N = normalize(sample2-sample1);
+				vec3 L = normalize(vec3(255,0,200)-grid_ray_dir);
+				vec3 V = normalize(vol_eye-grid_ray_dir);
+				val_color.xyz += shading(N, V, L);
+#else
+
                 t_hit = length(hit_p - vol_eye);
                 // Apply some scaling factor so the depth values are within [0, 1]
                 // to be displayed as a color. Here I'm just dividing by the volume
                 // dimensions to scale it
                 val_color.xyz = vec3(t_hit) / length(volumeDims);
+#endif
                 val_color.w = 1;
             }
 #else
