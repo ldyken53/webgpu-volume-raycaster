@@ -115,7 +115,7 @@ function makeBufferRequest(method, url) {
         var volDims = getVolumeDimensions(datasets[selection].name);
         // Buffer the volume dimensions
         var dims = device.createBuffer({
-            size: 3 * 4,
+            size: 4 * 4,
             usage: GPUBufferUsage.COPY_SRC,
             mappedAtCreation: true
         });
@@ -150,6 +150,32 @@ function makeBufferRequest(method, url) {
         device.defaultQueue.submit([commandEncoder.finish()]);
     }
 
+    async function selectIsovalue() {
+        var isovalue = document.getElementById("isovalue").value;
+        console.log(isovalue);
+        var upload = device.createBuffer({
+            size: 1 * 4,
+            usage: GPUBufferUsage.COPY_SRC,
+            mappedAtCreation: true
+        });
+        {
+            var map = new Float32Array(upload.getMappedRange());
+            map.set([isovalue]);
+        }
+        upload.unmap();
+
+        var commandEncoder = device.createCommandEncoder();
+
+        // Copy the upload buffer to our storage buffer
+        commandEncoder.copyBufferToBuffer(upload, 0, isovalueBuffer, 0, 1 * 4);
+        device.defaultQueue.submit([commandEncoder.finish()]);
+    }
+
+    async function setupIsovalue() {
+        var isovalue = document.getElementById("isovalue");
+        isovalue.oninput = selectIsovalue;
+    }
+
     async function fillVolumeSelector() {
         var selector = document.getElementById("volumeList");
         selector.onchange = selectVolume;
@@ -161,6 +187,7 @@ function makeBufferRequest(method, url) {
         }
     }
 
+    await setupIsovalue();
     await fillVolumeSelector();
 
     if (window.location.hash) {
@@ -308,6 +335,11 @@ function makeBufferRequest(method, url) {
                 visibility: GPUShaderStage.VERTEX,
                 type: "uniform-buffer"
             },
+            {
+                binding: 6,
+                visibility: GPUShaderStage.FRAGMENT,
+                type: "uniform-buffer"
+            }
         ]
     });
 
@@ -397,6 +429,11 @@ function makeBufferRequest(method, url) {
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
+    var isovalueBuffer = device.createBuffer({
+        size: 1 * 4,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
     // Create a bind group which places our view params buffer at binding 0
     var bindGroup = device.createBindGroup({
         layout: bindGroupLayout,
@@ -440,11 +477,20 @@ function makeBufferRequest(method, url) {
                     size: 3 * 4,
                     offset: 0
                 }
-            }
+            },
+            {
+                binding: 6,
+                resource: {
+                    buffer: isovalueBuffer,
+                    size: 1 * 4,
+                    offset: 0
+                }
+            },
         ]
     });
 
     await selectVolume();
+    await selectIsovalue();
 
     // Create an arcball camera and view projection matrix
     var camera = new ArcballCamera([0, 0, 3], [0, 0, 0], [0, 1, 0],
