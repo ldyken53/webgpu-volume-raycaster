@@ -16,6 +16,7 @@ layout(set = 0, binding = 1, std430) buffer RayInformation {
 
 layout(set = 0, binding = 2) uniform VolumeParams {
 	ivec3 volume_dims;
+    uint image_width;
 };
 
 vec2 intersect_box(vec3 orig, vec3 dir, const vec3 box_min, const vec3 box_max) {
@@ -37,6 +38,7 @@ void main() {
     const vec3 grid_ray_dir = normalize(ray_dir * volume_dims);
 
 	vec2 t_hit = intersect_box(vol_eye, grid_ray_dir, vec3(0), volume_dims - 1);
+    int index = gl_FragCoord.x + image_width * gl_FragCoord.y
 	if (t_hit.x > t_hit.y) {
         int index = gl_FragCoord.x + imgWidth * gl_FragCoord.y
         rays[index].block_id = UINT_MAX;
