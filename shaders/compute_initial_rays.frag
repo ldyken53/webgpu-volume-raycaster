@@ -46,6 +46,6 @@ void main() {
 	} else {
         rays[index].block_id = UINT_MAX;
         rays[index].ray_dir = ray_dir;
-        rays[index].t = 1000;
+        rays[index].t = 100000;
     }
 }
