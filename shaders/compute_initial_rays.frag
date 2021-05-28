@@ -40,7 +40,6 @@ void main() {
 	vec2 t_hit = intersect_box(vol_eye, grid_ray_dir, vec3(0), volume_dims - 1);
     int index = gl_FragCoord.x + image_width * gl_FragCoord.y
 	if (t_hit.x > t_hit.y) {
-        int index = gl_FragCoord.x + imgWidth * gl_FragCoord.y
         rays[index].block_id = UINT_MAX;
         rays[index].ray_dir = ray_dir;
         rays[index].t = t_hit.x;
