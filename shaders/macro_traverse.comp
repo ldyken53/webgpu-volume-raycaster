@@ -1,87 +1,36 @@
 #version 450 core
 
-layout(location = 0) in vec3 vray_dir;
-layout(location = 1) flat in vec3 transformed_eye;
+#define FLT_MAX ( 3.402823466e+38f )
 
-layout(set = 0, binding = 1) buffer VolumeData {
-	uint data[];
-} volumeData;
-layout(set = 0, binding = 2) uniform texture2D colormap;
-layout(set = 0, binding = 3) uniform sampler mySampler;
-layout(set = 0, binding = 4) uniform volumeParams {
-	ivec3 volumeDims;
-};
-layout(set = 0, binding = 6) uniform Isovalue {
-	float isovalue;
+layout(set = 0, binding = 1, std430) buffer BlockRanges
+{
+    vec2 block_ranges[];
 };
 
-layout(location = 0) out vec4 color;
+layout(set = 0, binding = 4) uniform VolumeParams {
+	ivec3 volume_dims;
+    float isovalue;
+    vec3 volume_scale;
+    uint image_width;
+};
 
-vec2 intersect_box(vec3 orig, vec3 dir, const vec3 box_min, const vec3 box_max) {
-    vec3 inv_dir = 1.0 / dir;
-    vec3 tmin_tmp = (box_min - orig) * inv_dir;
-    vec3 tmax_tmp = (box_max - orig) * inv_dir;
-    vec3 tmin = min(tmin_tmp, tmax_tmp);
-    vec3 tmax = max(tmin_tmp, tmax_tmp);
-    float t0 = max(tmin.x, max(tmin.y, tmin.z));
-    float t1 = min(tmax.x, min(tmax.y, tmax.z));
-    return vec2(t0, t1);
+layout(set = 0, binding = 0, std140) uniform ViewParams {
+    mat4 proj_view;
+    vec4 eye_pos;
+};
+
+struct RayInfo {
+    uint block_id;
+    vec3 ray_dir;
+    float t;
 }
 
-float trilinear_interpolate(vec3 fitted_p) {
-	ivec3 p1 = clamp(ivec3(fitted_p), ivec3(0), ivec3(volumeDims - 1));
-	// Need to apply minimum so function doesn't try to interpolate when on x, y, or z edges
-    ivec3 p2 = clamp(p1 + 1, ivec3(0), ivec3(volumeDims - 1));
-	// Keep track of the decimal portions 
-	vec3 differences = fitted_p - p1;
-	// Interpolate across x, then y, then z, and return the value normalized between 0 and 1
-	float c11 = volumeData.data[p1.x+p1.y*volumeDims.x+p1.z*volumeDims.x*volumeDims.y] * (1 - differences.x) + volumeData.data[p2.x+p1.y*volumeDims.x+p1.z*volumeDims.x*volumeDims.y] * differences.x;
-	float c12 = volumeData.data[p1.x+p1.y*volumeDims.x+p2.z*volumeDims.x*volumeDims.y] * (1 - differences.x) + volumeData.data[p2.x+p1.y*volumeDims.x+p2.z*volumeDims.x*volumeDims.y] * differences.x;
-	float c21 = volumeData.data[p1.x+p2.y*volumeDims.x+p1.z*volumeDims.x*volumeDims.y] * (1 - differences.x) + volumeData.data[p2.x+p2.y*volumeDims.x+p1.z*volumeDims.x*volumeDims.y] * differences.x;
-	float c22 = volumeData.data[p1.x+p2.y*volumeDims.x+p2.z*volumeDims.x*volumeDims.y] * (1 - differences.x) + volumeData.data[p2.x+p2.y*volumeDims.x+p2.z*volumeDims.x*volumeDims.y] * differences.x;
-	float c1 = c11 * (1 - differences.y) + c21 * differences.y;
-	float c2 = c12 * (1 - differences.y) + c22 * differences.y;
-	float c = c1 * (1 - differences.z) + c2 * differences.z;
-	return c / 255.0;
-}
-
-vec3 shading(vec3 N, vec3 V, vec3 L) {
-	vec3 Kd = vec3(0.6);
-	vec3 Ks = vec3(0.2);
-	float mean = 0.7;
-	float scale = 0.2;
-
-	vec3 lightIntensity = vec3(1);
-	vec3 H = normalize(L+V);
-	float n_h = dot(N,H);
-	float n_v = dot(N,V);
-	float v_h = dot(V,H);
-	float n_l = dot(N,L);
-
-	vec3 diffuse = Kd * max(n_l, 0);
-	float fresnel = pow(1.0 + v_h, 4);
-	float delta = acos(n_h).x;
-	float exponent = -pow((delta/mean), 2);
-	float microfacets = scale * exp(exponent);
-
-	float term1 = 2 * n_h * n_v/v_h;
-	float term2 = 2 * n_h * n_l/v_h;
-	float selfshadow = min(1, min(term1, term2));
-
-	vec3 specular = Ks * fresnel * microfacets * selfshadow / n_v;
-	return vec3(1) * (diffuse + specular);
-}
-
-float func(vec4 poly, float t) {
-	return (poly.x*pow(t,3)+poly.y*pow(t,2)+poly.z*t+poly.w);
-}
-
-bool outside_grid(const vec3 p) {
-    return any(lessThan(p, vec3(0))) || any(greaterThanEqual(p, vec3(volumeDims)));
-}
+layout(set = 0, binding = 1, std430) buffer RayInformation {
+    RayInfo rays[];
+};
 
 bool outside_dual_grid(const vec3 p) {
-    return any(lessThan(p, vec3(0))) || any(greaterThanEqual(p, vec3(volumeDims - 1)));
+    return any(lessThan(p, vec3(0))) || any(greaterThanEqual(p, vec3(volume_dims - 1)));
 }
 
 const ivec3 index_to_vertex[8] = {
@@ -95,113 +44,21 @@ const ivec3 index_to_vertex[8] = {
     ivec3(1, 1, 1)  // v111 = 7
 };
 
-// Load the vertex values for the dual cell's vertices with its bottom-near-left corner
-// at v000. Vertex values will be returned in the order:
-// [v000, v100, v110, v010, v001, v101, v111, v011]
-void load_vertex_values(const ivec3 v000, out float values[8], out vec2 cell_range) {
-    cell_range.x = 1e20f;
-    cell_range.y = -1e20f;
-    for (int i = 0; i < 8; ++i) { 
-        ivec3 v = v000 + index_to_vertex[i];
-        values[i] = volumeData.data[v.x + volumeDims.x * (v.y + v.z * volumeDims.y)] / 255.0;
-        cell_range.x = min(cell_range.x, values[i]);
-        cell_range.y = max(cell_range.y, values[i]);
-    }
-}
-
-// Trilinear interpolation at the given point within the cell with its origin at v000
-// (origin = bottom-left-near point)
-float trilinear_interpolate_in_cell(const vec3 p, const ivec3 v000, in float values[8]) {
-    const vec3 diff = p - v000;
-	// Interpolate across x, then y, then z, and return the value normalized between 0 and 1
-    // WILL note: renamed t0 c00/c11 to match wikipedia notation
-	const float c00 = values[0] * (1.f - diff.x) + values[1] * diff.x;
-	const float c01 = values[4] * (1.f - diff.x) + values[5] * diff.x;
-    const float c10 = values[2] * (1.f - diff.x) + values[3] * diff.x;
-    const float c11 = values[6] * (1.f - diff.x) + values[7] * diff.x;
-	const float c0 = c00 * (1.f - diff.y) + c10 * diff.y;
-	const float c1 = c01 * (1.f - diff.y) + c11 * diff.y;
-	return c0 * (1.f - diff.z) + c1 * diff.z;
-}
-
-#define USE_POLYNOMIAL 1
-#define MARMITT 1
-#define SHOW_VOLUME 0
-#define GRADIENT_SHADING 0
-
-// Compute the polynomial for the cell with the given vertex values
-vec4 compute_polynomial(const vec3 p, const vec3 dir, const vec3 v000, in float values[8]) {
-    const vec3 v111 = v000 + vec3(1);
-    // Note: Grid voxels sizes are 1^3
-    const vec3 a[2] = {v111 - p, p - v000};
-    const vec3 b[2] = {dir, -dir};
-
-    vec4 poly = vec4(0);
-	poly.w -= isovalue;
-    for (int k = 0; k < 2; ++k) {
-        for (int j = 0; j < 2; ++j) {
-            for (int i = 0; i < 2; ++i) {
-                const float val = values[i + 2 * (j + 2 * k)];
-
-                poly.x += b[i].x * b[j].y * b[k].z * val;
-
-                poly.y += (a[i].x * b[j].y * b[k].z +
-                           b[i].x * a[j].y * b[k].z +
-                           b[i].x * b[j].y * a[k].z) * val;
-
-                poly.z += (b[i].x * a[j].y * a[k].z +
-                           a[i].x * b[j].y * a[k].z +
-                           a[i].x * a[j].y * b[k].z) * val;
-
-                poly.w += a[i].x * a[j].y * a[k].z * val;
-            }
-        }
-    }
-
-	return poly;
-}
-
-float evaluate_polynomial(const vec4 poly, const float t) {
-    return poly.x * pow(t, 3.f) + poly.y * pow(t, 2.f) + poly.z * t + poly.w;
-}
-
-// Returns true if the quadratic has real roots
-bool solve_quadratic(const vec3 poly, out float roots[2]) {
-    // Check for case when poly is just Bt + c = 0
-    if (poly.x == 0) {
-        roots[0] = -poly.z/poly.y;
-        roots[1] = -poly.z/poly.y;
-        return true;
-    }
-    float discriminant = pow(poly.y, 2.f) - 4.f * poly.x * poly.z;
-    if (discriminant < 0.f) {
-        return false;
-    }
-    discriminant = sqrt(discriminant);
-    vec2 r = 0.5f * vec2(-poly.y + discriminant, -poly.y - discriminant) / poly.x;
-    roots[0] = min(r.x, r.y);
-    roots[1] = max(r.x, r.y);
-    return true;
-}
-
 void main() {
-    vec3 ray_dir = normalize(vray_dir);
+    RayInfo ray_info = rays[gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * image_width];
 
-    // Transform the ray into the dual grid space and intersect with the dual grid bounds
-	const vec3 vol_eye = transformed_eye * volumeDims - vec3(0.5);
-    const vec3 grid_ray_dir = normalize(ray_dir * volumeDims);
+    if (ray_info.t == FLT_MAX) {
+        return;
+    }
 
-	vec2 t_hit = intersect_box(vol_eye, grid_ray_dir, vec3(0), volumeDims - 1);
-	if (t_hit.x > t_hit.y) {
-		discard;
-	}
-	// We don't want to sample voxels behind the eye if it's
-	// inside the volume, so keep the starting point at or in front
-	// of the eye
-	t_hit.x = max(t_hit.x, 0.0);
+    // Transform the ray into the dual grid space
+    vec3 volume_translation = vec3(0) - volume_scale * 0.5;
+	vec3 transformed_eye = (eye_pos.xyz - volume_translation) / volume_scale;
+	const vec3 vol_eye = transformed_eye * volume_dims - vec3(0.5);
+    const vec3 grid_ray_dir = normalize(ray_info.ray_dir * volume_dims);
 
-	vec3 p = (vol_eye + t_hit.x * grid_ray_dir);
-    p = clamp(p, vec3(0), vec3(volumeDims - 2));
+	vec3 p = (vol_eye + ray_info.t * grid_ray_dir);
+    p = clamp(p, vec3(0), vec3(volume_dims - 2));
     const vec3 inv_grid_ray_dir = 1.0 / grid_ray_dir;
     const vec3 start_cell = floor(p);
     const vec3 t_max_neg = (start_cell - vol_eye) * inv_grid_ray_dir;
@@ -219,7 +76,7 @@ void main() {
      * is an additional -0.5 offset in voxel space (shifting by 0.5 grid cells down)
      */
 
-    float t_prev = t_hit.x;
+    float t_prev = ray_info.t;
     float vertex_values[8];
     vec2 cell_range;
     color = vec4(0);
@@ -323,7 +180,7 @@ void main() {
                 // Apply some scaling factor so the depth values are within [0, 1]
                 // to be displayed as a color. Here I'm just dividing by the volume
                 // dimensions to scale it
-                val_color.xyz = vec3(t_hit) / length(volumeDims);
+                val_color.xyz = vec3(t_hit) / length(volume_dims);
 #endif
                 val_color.w = 1;
             }

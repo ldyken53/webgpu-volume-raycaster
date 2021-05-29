@@ -1,5 +1,6 @@
 #version 450 core
 #define UINT_MAX uint(0xffffffff)
+#define FLT_MAX ( 3.402823466e+38f )
 
 layout(location = 0) in vec3 vray_dir;
 layout(location = 1) flat in vec3 transformed_eye;
@@ -16,6 +17,8 @@ layout(set = 0, binding = 1, std430) buffer RayInformation {
 
 layout(set = 0, binding = 2) uniform VolumeParams {
 	ivec3 volume_dims;
+    float isovalue;
+    vec3 volume_scale;
     uint image_width;
 };
 
@@ -38,6 +41,12 @@ void main() {
     const vec3 grid_ray_dir = normalize(ray_dir * volume_dims);
 
 	vec2 t_hit = intersect_box(vol_eye, grid_ray_dir, vec3(0), volume_dims - 1);
+    
+	// We don't want to sample voxels behind the eye if it's
+	// inside the volume, so keep the starting point at or in front
+	// of the eye
+	t_hit.x = max(t_hit.x, 0.0);
+    
     int index = gl_FragCoord.x + image_width * gl_FragCoord.y
 	if (t_hit.x > t_hit.y) {
         rays[index].block_id = UINT_MAX;
@@ -46,6 +55,6 @@ void main() {
 	} else {
         rays[index].block_id = UINT_MAX;
         rays[index].ray_dir = ray_dir;
-        rays[index].t = 100000;
+        rays[index].t = FLT_MAX;
     }
 }

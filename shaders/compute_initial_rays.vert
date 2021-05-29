@@ -9,8 +9,12 @@ layout(set = 0, binding = 0, std140) uniform ViewParams {
     mat4 proj_view;
     vec4 eye_pos;
 };
-layout(set = 0, binding = 5) uniform volumeScale {
-    vec3 volume_scale;
+
+layout(set = 0, binding = 5) uniform VolumeParams {
+	ivec3 volume_dims;
+	float isovalue;
+	vec3 volume_scale;
+    uint image_width;
 };
 
 void main(void) {
